@@ -1,6 +1,7 @@
 import yt_dlp
 import os
 import platform
+import certifi  # Handles SSL certificates
 
 
 class YouTubeDownloader:
@@ -19,7 +20,7 @@ class YouTubeDownloader:
             print("No cookies file found — proceeding anonymously")
 
     def detect_ffmpeg_path(self):
-        """Detect FFmpeg location based on OS/environment."""
+        """Detects FFmpeg location based on OS/environment."""
         system = platform.system().lower()
         if system.startswith("win"):
             return r"C:\ffmpeg\bin"
@@ -39,10 +40,7 @@ class YouTubeDownloader:
                 'quiet': True,
                 'no_warnings': False,
                 'ffmpeg_location': self.ffmpeg_location,
-                'force_generic_extractor': True,
-                'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
-                              'AppleWebKit/537.36 (KHTML, like Gecko) '
-                              'Chrome/116.0.0.0 Safari/537.36',
+                'ca_certs': certifi.where(),  # Fix SSL certificate verification
             }
             if self.cookie_path:
                 ydl_opts['cookiefile'] = self.cookie_path
@@ -77,11 +75,7 @@ class YouTubeDownloader:
                 'addmetadata': True,
                 'noplaylist': True,
                 'socket_timeout': 30,
-                'force_generic_extractor': True,
-                'nocheckcertificate': True,
-                'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
-                              'AppleWebKit/537.36 (KHTML, like Gecko) '
-                              'Chrome/116.0.0.0 Safari/537.36',
+                'ca_certs': certifi.where(),  # Fix SSL certificate verification
             }
 
             if self.cookie_path:
