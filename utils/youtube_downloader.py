@@ -19,7 +19,7 @@ class YouTubeDownloader:
             print("No cookies file found — proceeding anonymously")
 
     def detect_ffmpeg_path(self):
-        """Detects FFmpeg location based on OS/environment."""
+        """Detect FFmpeg location based on OS/environment."""
         system = platform.system().lower()
         if system.startswith("win"):
             return r"C:\ffmpeg\bin"
@@ -39,9 +39,10 @@ class YouTubeDownloader:
                 'quiet': True,
                 'no_warnings': False,
                 'ffmpeg_location': self.ffmpeg_location,
-                'force_generic_extractor': True,  # force desktop extraction
-                'youtube_include_dash_manifest': False,
-                'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36'
+                'force_generic_extractor': True,
+                'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+                              'AppleWebKit/537.36 (KHTML, like Gecko) '
+                              'Chrome/116.0.0.0 Safari/537.36',
             }
             if self.cookie_path:
                 ydl_opts['cookiefile'] = self.cookie_path
@@ -76,9 +77,11 @@ class YouTubeDownloader:
                 'addmetadata': True,
                 'noplaylist': True,
                 'socket_timeout': 30,
-                'force_generic_extractor': True,  # force desktop extraction
-                'youtube_include_dash_manifest': False,
-                'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36'
+                'force_generic_extractor': True,
+                'nocheckcertificate': True,
+                'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+                              'AppleWebKit/537.36 (KHTML, like Gecko) '
+                              'Chrome/116.0.0.0 Safari/537.36',
             }
 
             if self.cookie_path:
