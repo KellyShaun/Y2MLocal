@@ -1,6 +1,5 @@
 import yt_dlp
 import os
-import re
 import platform
 
 
@@ -10,7 +9,9 @@ class YouTubeDownloader:
         self.ffmpeg_location = ffmpeg_path or self.detect_ffmpeg_path()
         self.cookie_path = cookie_path if cookie_path and os.path.exists(cookie_path) else None
 
-        print(f"YouTubeDownloader initialized with folder: {download_folder}")
+        os.makedirs(self.download_folder, exist_ok=True)
+
+        print(f"YouTubeDownloader initialized with folder: {self.download_folder}")
         print(f"FFmpeg location: {self.ffmpeg_location}")
         if self.cookie_path:
             print(f"Using cookies from: {self.cookie_path}")
@@ -58,7 +59,7 @@ class YouTubeDownloader:
             return {'success': False, 'error': str(e)}
 
     def download_audio(self, url, progress_hook=None):
-        """Download audio from YouTube URL"""
+        """Download audio from YouTube URL as MP3"""
         try:
             ydl_opts = {
                 'format': 'bestaudio/best',
@@ -69,13 +70,9 @@ class YouTubeDownloader:
                     'preferredquality': '192',
                 }],
                 'ffmpeg_location': self.ffmpeg_location,
-                'writethumbnail': False,
-                'embedthumbnail': False,
                 'addmetadata': True,
+                'noplaylist': True,
                 'socket_timeout': 30,
-                'retries': 10,
-                'extractaudio': True,
-                'audioformat': 'mp3',
             }
 
             if self.cookie_path:
@@ -85,17 +82,11 @@ class YouTubeDownloader:
                 ydl_opts['progress_hooks'] = [progress_hook]
 
             print(f"Starting download for: {url}")
-            print(f"Using FFmpeg at: {self.ffmpeg_location}")
-
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=False)
+                info = ydl.extract_info(url, download=True)
                 original_title = info.get('title', 'unknown_title')
                 expected_filename = self.sanitize_filename(f"{original_title}.mp3")
                 expected_path = os.path.join(self.download_folder, expected_filename)
-
-                print(f"Expected output: {expected_filename}")
-                ydl.download([url])
-                print("Download complete")
 
             if os.path.exists(expected_path):
                 print(f"✓ MP3 created: {expected_filename}")
@@ -106,8 +97,7 @@ class YouTubeDownloader:
                     'duration': info.get('duration', 0)
                 }
 
-            # fallback: find the newest MP3 file
-            print("Checking for MP3 files in folder...")
+            # Fallback: pick latest MP3 file
             mp3_files = [f for f in os.listdir(self.download_folder) if f.endswith('.mp3')]
             if mp3_files:
                 latest = max(mp3_files, key=lambda f: os.path.getctime(os.path.join(self.download_folder, f)))
@@ -126,6 +116,7 @@ class YouTubeDownloader:
             return {'success': False, 'error': str(e)}
 
     def sanitize_filename(self, filename):
+        """Remove invalid characters and limit length"""
         invalid_chars = '<>:"/\\|?*'
         for char in invalid_chars:
             filename = filename.replace(char, '')
@@ -136,6 +127,7 @@ class YouTubeDownloader:
         return filename
 
     def format_duration(self, seconds):
+        """Format seconds to HH:MM:SS or MM:SS"""
         if not seconds:
             return "00:00"
         hours = seconds // 3600
