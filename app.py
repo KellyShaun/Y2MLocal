@@ -7,7 +7,6 @@ import logging
 import json
 import platform
 from flask import send_from_directory
-from flask import send_from_directory
 
 # =========================
 # Environment & Setup
@@ -193,6 +192,13 @@ def index():
     return send_from_directory('templates', 'index.html')
 
 
+app = Flask(__name__)
+
+@app.route('/')
+def index():
+    return render_template('index.html')  # must be inside 'templates/'
+
+
 if __name__ == '__main__':
     existing_downloads = []
     try:
@@ -202,6 +208,7 @@ if __name__ == '__main__':
 
     print(f"Found {len(existing_downloads)} existing MP3 files.")
     app.run(host='0.0.0.0', port=5000, debug=True)
+
 
 
 
