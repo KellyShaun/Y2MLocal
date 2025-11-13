@@ -483,4 +483,5 @@ const downloader = new YouTubeDownloader();
 // Auto-refresh downloads list every 30 seconds
 setInterval(() => {
     downloader.loadDownloads();
+
 }, 30000);
