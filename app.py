@@ -7,6 +7,7 @@ import logging
 import json
 import platform
 from flask import send_from_directory
+from flask import send_from_directory
 
 # =========================
 # Environment & Setup
@@ -187,6 +188,9 @@ class DownloadThread(threading.Thread):
 # =========================
 
 # ... paste all your existing routes here (from index() to get_stats()) ...
+@app.route('/')
+def index():
+    return send_from_directory('static', 'index.html')
 
 
 if __name__ == '__main__':
@@ -199,7 +203,5 @@ if __name__ == '__main__':
     print(f"Found {len(existing_downloads)} existing MP3 files.")
     app.run(host='0.0.0.0', port=5000, debug=True)
 
-@app.route('/')
-def index():
-    return send_from_directory('static', 'index.html')
+
 
