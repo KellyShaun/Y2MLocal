@@ -1,14 +1,34 @@
 import yt_dlp
 import os
 import re
+import platform
+
 
 class YouTubeDownloader:
-    def __init__(self, download_folder):
+    def __init__(self, download_folder, ffmpeg_path=None, cookie_path=None):
         self.download_folder = download_folder
-        # Direct path to FFmpeg - use the same path that worked in the manual test
-        self.ffmpeg_location = r"C:\ffmpeg\bin"
+        self.ffmpeg_location = ffmpeg_path or self.detect_ffmpeg_path()
+        self.cookie_path = cookie_path if cookie_path and os.path.exists(cookie_path) else None
+
         print(f"YouTubeDownloader initialized with folder: {download_folder}")
         print(f"FFmpeg location: {self.ffmpeg_location}")
+        if self.cookie_path:
+            print(f"Using cookies from: {self.cookie_path}")
+        else:
+            print("No cookies file found — proceeding anonymously")
+
+    def detect_ffmpeg_path(self):
+        """Detects FFmpeg location based on OS/environment."""
+        system = platform.system().lower()
+        if system.startswith("win"):
+            return r"C:\ffmpeg\bin"
+        elif os.path.exists("/usr/bin/ffmpeg"):
+            return "/usr/bin/ffmpeg"
+        elif os.path.exists("/usr/local/bin/ffmpeg"):
+            return "/usr/local/bin/ffmpeg"
+        else:
+            print("⚠️ FFmpeg not found in standard locations; relying on PATH")
+            return "ffmpeg"
 
     def get_video_info(self, url):
         """Get video information without downloading"""
@@ -17,7 +37,11 @@ class YouTubeDownloader:
             ydl_opts = {
                 'quiet': True,
                 'no_warnings': False,
+                'ffmpeg_location': self.ffmpeg_location,
             }
+            if self.cookie_path:
+                ydl_opts['cookiefile'] = self.cookie_path
+
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
                 print(f"Video info retrieved: {info.get('title', 'Unknown')}")
@@ -36,116 +60,85 @@ class YouTubeDownloader:
     def download_audio(self, url, progress_hook=None):
         """Download audio from YouTube URL"""
         try:
-            # YouTube downloader options - using the same settings that worked in manual test
             ydl_opts = {
-                # Format selection
                 'format': 'bestaudio/best',
-                
-                # Output template
                 'outtmpl': os.path.join(self.download_folder, '%(title)s.%(ext)s'),
-                
-                # Post-processing to convert to MP3 - EXACT SAME as manual test
                 'postprocessors': [{
                     'key': 'FFmpegExtractAudio',
                     'preferredcodec': 'mp3',
                     'preferredquality': '192',
                 }],
-                
-                # FFmpeg location - EXACT SAME as manual test
                 'ffmpeg_location': self.ffmpeg_location,
-                
-                # Basic settings
                 'writethumbnail': False,
                 'embedthumbnail': False,
                 'addmetadata': True,
-                
-                # Network settings
                 'socket_timeout': 30,
                 'retries': 10,
-                
-                # Additional settings to match manual test
                 'extractaudio': True,
                 'audioformat': 'mp3',
             }
 
-            # Add progress hook if provided
+            if self.cookie_path:
+                ydl_opts['cookiefile'] = self.cookie_path
+
             if progress_hook:
                 ydl_opts['progress_hooks'] = [progress_hook]
 
-            print(f"Starting download process for: {url}")
+            print(f"Starting download for: {url}")
             print(f"Using FFmpeg at: {self.ffmpeg_location}")
-            
+
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                # Get info first
                 info = ydl.extract_info(url, download=False)
-                original_title = info['title']
+                original_title = info.get('title', 'unknown_title')
                 expected_filename = self.sanitize_filename(f"{original_title}.mp3")
                 expected_path = os.path.join(self.download_folder, expected_filename)
-                
+
                 print(f"Expected output: {expected_filename}")
-                
-                # Download the audio
-                print("Starting download and conversion...")
                 ydl.download([url])
-                print("Download process completed")
-            
-            # Check if MP3 file was created
+                print("Download complete")
+
             if os.path.exists(expected_path):
-                print(f"✓ MP3 file created successfully: {expected_filename}")
+                print(f"✓ MP3 created: {expected_filename}")
                 return {
                     'success': True,
                     'filename': expected_filename,
                     'title': original_title,
                     'duration': info.get('duration', 0)
                 }
-            
-            # If expected file doesn't exist, look for any MP3 files
-            print("Checking for MP3 files in download folder...")
-            mp3_files = []
-            for file in os.listdir(self.download_folder):
-                if file.endswith('.mp3'):
-                    mp3_files.append(file)
-                    print(f"Found MP3 file: {file}")
-            
+
+            # fallback: find the newest MP3 file
+            print("Checking for MP3 files in folder...")
+            mp3_files = [f for f in os.listdir(self.download_folder) if f.endswith('.mp3')]
             if mp3_files:
-                latest_file = max(mp3_files, key=lambda f: os.path.getctime(os.path.join(self.download_folder, f)))
-                print(f"✓ Using MP3 file: {latest_file}")
+                latest = max(mp3_files, key=lambda f: os.path.getctime(os.path.join(self.download_folder, f)))
+                print(f"✓ Using fallback file: {latest}")
                 return {
                     'success': True,
-                    'filename': latest_file,
+                    'filename': latest,
                     'title': original_title,
                     'duration': info.get('duration', 0)
                 }
-            
-            return {'success': False, 'error': 'No MP3 files were created'}
-                
+
+            return {'success': False, 'error': 'No MP3 file was created'}
+
         except Exception as e:
             print(f"Download error: {str(e)}")
             return {'success': False, 'error': str(e)}
 
     def sanitize_filename(self, filename):
-        """Remove invalid characters from filename"""
         invalid_chars = '<>:"/\\|?*'
         for char in invalid_chars:
             filename = filename.replace(char, '')
-        filename = filename.replace('\'', '').replace('"', '')
-        
+        filename = filename.replace("'", '').replace('"', '')
         if len(filename) > 100:
             name, ext = os.path.splitext(filename)
-            filename = name[:100-len(ext)] + ext
-            
+            filename = name[:100 - len(ext)] + ext
         return filename
 
     def format_duration(self, seconds):
-        """Format duration in seconds to HH:MM:SS"""
         if not seconds:
             return "00:00"
-        
         hours = seconds // 3600
         minutes = (seconds % 3600) // 60
         secs = seconds % 60
-        
-        if hours > 0:
-            return f"{hours:02d}:{minutes:02d}:{secs:02d}"
-        else:
-            return f"{minutes:02d}:{secs:02d}"
+        return f"{hours:02d}:{minutes:02d}:{secs:02d}" if hours else f"{minutes:02d}:{secs:02d}"
