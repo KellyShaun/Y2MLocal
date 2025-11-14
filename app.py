@@ -18,17 +18,18 @@ DOWNLOAD_FOLDER = "downloads"
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
 # ----------------------------
-# Multiple Invidious instances for redundancy
+# External download services as fallback
 # ----------------------------
-INVIDIOUS_INSTANCES = [
-    "https://vid.puffyan.us",
-    "https://inv.riverside.rocks", 
-    "https://yt.artemislena.eu",
-    "https://invidious.nerdvpn.de",
-    "https://y.com.sb",
-    "https://inv.nadeko.net",
-    "https://invidious.flokinet.to",
-    "https://inv.us.projectsegfau.lt"
+EXTERNAL_SERVICES = [
+    {
+        'name': 'y2mate',
+        'api_url': 'https://www.y2mate.com/mates/analyzeV2/ajax',
+        'download_url': 'https://www.y2mate.com/mates/convertV2/index'
+    },
+    {
+        'name': 'onlinevideoconverter',
+        'api_url': 'https://onlinevideoconverter.pro/api/convert'
+    }
 ]
 
 # ----------------------------
@@ -82,84 +83,12 @@ def extract_video_id(url):
             return match.group(1)
     return None
 
-def get_video_info_from_invidious(video_id):
-    """Get video info from Invidious API - primary method"""
-    for instance in INVIDIOUS_INSTANCES:
-        try:
-            api_url = f"{instance}/api/v1/videos/{video_id}"
-            print(f"Trying Invidious instance: {instance}")
-            response = requests.get(api_url, timeout=10)
-            if response.status_code == 200:
-                data = response.json()
-                
-                # Check if video is available
-                if data.get('error'):
-                    continue
-                
-                filename = sanitize_filename(f"{data.get('title', 'unknown')}.mp3")
-                file_path = os.path.join(DOWNLOAD_FOLDER, filename)
-                already_downloaded = os.path.exists(file_path)
-                
-                result = {
-                    'title': data.get('title', 'Unknown Title'),
-                    'uploader': data.get('author', 'Unknown'),
-                    'duration': time.strftime('%H:%M:%S', time.gmtime(data.get('lengthSeconds', 0))),
-                    'view_count': data.get('viewCount', 0),
-                    'thumbnail': data.get('videoThumbnails', [{}])[4].get('url') if data.get('videoThumbnails') else None,
-                    'file_path': file_path,
-                    'already_downloaded': already_downloaded,
-                    'video_id': video_id,
-                    'source': 'invidious'
-                }
-                print(f"✓ Successfully got info from Invidious: {result['title']}")
-                return result
-        except Exception as e:
-            print(f"Invidious instance {instance} failed: {str(e)}")
-            continue
-    
-    return None
-
-def get_video_info_from_youtube_direct(video_id):
-    """Fallback: Try direct YouTube extraction with minimal settings"""
-    try:
-        ydl_opts = {
-            'format': 'bestaudio/best',
-            'quiet': True,
-            'no_warnings': True,
-            'extract_flat': False,
-            'ignoreerrors': True,
-            'no_check_certificate': True,
-            'extract_flat': False,
-        }
-        
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
-            
-            filename = sanitize_filename(f"{info.get('title', 'unknown')}.mp3")
-            file_path = os.path.join(DOWNLOAD_FOLDER, filename)
-            already_downloaded = os.path.exists(file_path)
-            
-            return {
-                'title': info.get('title', 'Unknown Title'),
-                'uploader': info.get('uploader', 'Unknown'),
-                'duration': time.strftime('%H:%M:%S', time.gmtime(info.get('duration', 0))),
-                'view_count': info.get('view_count', 0),
-                'thumbnail': info.get('thumbnail'),
-                'file_path': file_path,
-                'already_downloaded': already_downloaded,
-                'video_id': video_id,
-                'source': 'youtube_direct'
-            }
-    except Exception as e:
-        print(f"YouTube direct extraction failed: {str(e)}")
-        return None
-
 def get_basic_video_info(video_id):
-    """Final fallback: Get minimal info using public methods"""
+    """Get basic video info using public methods"""
     try:
         # Try to get basic info from oEmbed
         oembed_url = f"https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={video_id}&format=json"
-        response = requests.get(oembed_url, timeout=5)
+        response = requests.get(oembed_url, timeout=10)
         
         if response.status_code == 200:
             data = response.json()
@@ -178,8 +107,8 @@ def get_basic_video_info(video_id):
                 'video_id': video_id,
                 'source': 'oembed'
             }
-    except:
-        pass
+    except Exception as e:
+        print(f"oEmbed failed: {e}")
     
     # Absolute fallback - just the video ID
     filename = sanitize_filename(f"video_{video_id}.mp3")
@@ -198,27 +127,153 @@ def get_basic_video_info(video_id):
         'source': 'fallback'
     }
 
-def extract_audio_info(url):
-    """Main function to extract video info with multiple fallbacks"""
+def try_external_download_service(video_id, download_id):
+    """Try to download using external services"""
+    try:
+        # Method 1: Try y2mate-like service
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+            'Accept': 'application/json, text/javascript, */*; q=0.01',
+            'X-Requested-With': 'XMLHttpRequest',
+            'Origin': 'https://www.y2mate.com',
+            'Referer': 'https://www.y2mate.com/'
+        }
+        
+        # Analyze the video
+        analyze_data = {
+            'k_query': f'https://www.youtube.com/watch?v={video_id}',
+            'k_page': 'home',
+            'hl': 'en',
+            'q_auto': 0
+        }
+        
+        analyze_response = requests.post(
+            'https://www.y2mate.com/mates/analyzeV2/ajax',
+            data=analyze_data,
+            headers=headers,
+            timeout=30
+        )
+        
+        if analyze_response.status_code == 200:
+            analyze_data = analyze_response.json()
+            if analyze_data.get('status') == 'success':
+                # Get the download link
+                video_title = analyze_data.get('title', f'video_{video_id}')
+                vid = analyze_data.get('vid')
+                
+                convert_data = {
+                    'vid': vid,
+                    'k': f'https://www.youtube.com/watch?v={video_id}'
+                }
+                
+                convert_response = requests.post(
+                    'https://www.y2mate.com/mates/convertV2/index',
+                    data=convert_data,
+                    headers=headers,
+                    timeout=30
+                )
+                
+                if convert_response.status_code == 200:
+                    convert_data = convert_response.json()
+                    if convert_data.get('status') == 'success':
+                        download_url = convert_data.get('dlink')
+                        if download_url:
+                            # Download the file
+                            filename = sanitize_filename(f"{video_title}.mp3")
+                            file_path = os.path.join(DOWNLOAD_FOLDER, filename)
+                            
+                            audio_response = requests.get(download_url, stream=True, timeout=60)
+                            if audio_response.status_code == 200:
+                                with open(file_path, 'wb') as f:
+                                    for chunk in audio_response.iter_content(chunk_size=8192):
+                                        if chunk:
+                                            f.write(chunk)
+                                
+                                downloads_progress[download_id]['file'] = file_path
+                                downloads_progress[download_id]['finished'] = True
+                                downloads_progress[download_id]['progress'] = 100
+                                return True
+    except Exception as e:
+        print(f"External service download failed: {e}")
+    
+    return False
+
+def download_with_fallback(url, download_id):
+    """Try multiple download methods"""
     video_id = extract_video_id(url)
     if not video_id:
         raise Exception("Could not extract video ID from URL")
     
-    print(f"Extracting info for video: {video_id}")
+    # Method 1: Try external services first
+    print("Trying external download services...")
+    if try_external_download_service(video_id, download_id):
+        return
     
-    # Method 1: Try Invidious first
-    info = get_video_info_from_invidious(video_id)
-    if info:
-        return info
-    
-    # Method 2: Try direct YouTube extraction
-    info = get_video_info_from_youtube_direct(video_id)
-    if info:
-        return info
-    
-    # Method 3: Get basic info as last resort
-    info = get_basic_video_info(video_id)
-    return info
+    # Method 2: Try yt-dlp with aggressive settings as last resort
+    print("Trying yt-dlp with aggressive settings...")
+    try:
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'outtmpl': os.path.join(DOWNLOAD_FOLDER, '%(title)s.%(ext)s'),
+            'quiet': True,
+            'no_warnings': True,
+            'ignoreerrors': True,
+            'no_check_certificate': True,
+            'progress_hooks': [create_progress_hook(download_id)],
+            'extract_flat': False,
+            'socket_timeout': 30,
+            'retries': 10,
+            'fragment_retries': 10,
+            'skip_unavailable_fragments': True,
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-us,en;q=0.5',
+                'Accept-Encoding': 'gzip,deflate',
+                'Accept-Charset': 'ISO-8859-1,utf-8;q=0.7,*;q=0.7',
+                'Keep-Alive': '300',
+                'Connection': 'keep-alive',
+                'Referer': 'https://www.youtube.com/',
+            }
+        }
+        
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            
+            # Find the downloaded file and convert to MP3 if needed
+            downloaded_files = [f for f in os.listdir(DOWNLOAD_FOLDER) 
+                              if video_id in f and f.endswith(('.m4a', '.webm', '.opus'))]
+            
+            if downloaded_files:
+                original_file = os.path.join(DOWNLOAD_FOLDER, downloaded_files[0])
+                mp3_file = original_file.rsplit('.', 1)[0] + '.mp3'
+                
+                # Convert to MP3
+                ffmpeg_path = detect_ffmpeg_path()
+                result = subprocess.run([
+                    ffmpeg_path, '-y', '-i', original_file, 
+                    '-vn', '-acodec', 'libmp3lame', 
+                    '-ab', '192k', '-ar', '44100', 
+                    mp3_file
+                ], capture_output=True, text=True)
+                
+                if result.returncode == 0 and os.path.exists(mp3_file):
+                    # Remove original file
+                    if os.path.exists(original_file):
+                        os.remove(original_file)
+                    
+                    downloads_progress[download_id]['file'] = mp3_file
+                    downloads_progress[download_id]['finished'] = True
+                    downloads_progress[download_id]['progress'] = 100
+                    return
+        
+        # If we get here, yt-dlp failed
+        raise Exception("All download methods failed")
+        
+    except Exception as e:
+        print(f"yt-dlp download failed: {e}")
+        raise Exception(f"Download failed: {str(e)}")
 
 def download_to_mp3(url, download_id):
     """Main download function"""
@@ -227,34 +282,16 @@ def download_to_mp3(url, download_id):
         if not video_id:
             raise Exception("Could not extract video ID from URL")
         
-        # Get video info
-        video_info = extract_audio_info(url)
-        
         # Check if already downloaded
-        if video_info['already_downloaded']:
-            downloads_progress[download_id]['file'] = video_info['file_path']
-            downloads_progress[download_id]['finished'] = True
-            downloads_progress[download_id]['progress'] = 100
-            return
+        for f in os.listdir(DOWNLOAD_FOLDER):
+            if f.endswith('.mp3') and video_id in f:
+                downloads_progress[download_id]['file'] = os.path.join(DOWNLOAD_FOLDER, f)
+                downloads_progress[download_id]['finished'] = True
+                downloads_progress[download_id]['progress'] = 100
+                return
         
-        # Download using yt-dlp with minimal settings
-        ydl_opts = {
-            'format': 'bestaudio/best',
-            'outtmpl': os.path.join(DOWNLOAD_FOLDER, '%(title)s.%(ext)s'),
-            'quiet': True,
-            'no_warnings': True,
-            'progress_hooks': [create_progress_hook(download_id)],
-            'ignoreerrors': True,
-            'no_check_certificate': True,
-        }
-        
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
-        
-        # Update progress
-        downloads_progress[download_id]['file'] = video_info['file_path'].replace('.mp3', '').replace('.m4a', '') + '.mp3'
-        downloads_progress[download_id]['finished'] = True
-        downloads_progress[download_id]['progress'] = 100
+        # Try to download
+        download_with_fallback(url, download_id)
         
     except Exception as e:
         downloads_progress[download_id]['error'] = str(e)
@@ -279,15 +316,14 @@ def info():
         return jsonify({'success': False, 'error': 'Please provide a valid YouTube URL'})
     
     try:
-        video_info = extract_audio_info(url)
+        video_id = extract_video_id(url)
+        if not video_id:
+            return jsonify({'success': False, 'error': 'Invalid YouTube URL'})
         
-        # If we only have basic info, note that download might not work
-        if video_info['source'] in ['oembed', 'fallback']:
-            video_info['limited_info'] = True
-            video_info['warning'] = 'Limited information available. Download may not work for this video.'
-        else:
-            video_info['limited_info'] = False
-            
+        video_info = get_basic_video_info(video_id)
+        video_info['limited_info'] = True
+        video_info['warning'] = 'Download may take longer as we use external services'
+        
         return jsonify({'success': True, **video_info})
         
     except Exception as e:
@@ -295,7 +331,7 @@ def info():
         print(f"Error getting video info: {error_msg}")
         return jsonify({
             'success': False, 
-            'error': 'Could not fetch video info. The video may be private, unavailable, or restricted in your region.'
+            'error': 'Could not fetch video info. Please check the URL and try again.'
         })
 
 @app.route('/download-mp3', methods=['POST'])
@@ -389,14 +425,14 @@ if __name__ == "__main__":
     # Clean up any temp files on startup
     temp_dir = tempfile.gettempdir()
     for f in os.listdir(temp_dir):
-        if f.endswith(('.m4a', '.webm', '.opus', '.part', '.audio')):
+        if f.endswith(('.m4a', '.webm', '.opus', '.part')):
             try:
                 os.remove(os.path.join(temp_dir, f))
             except:
                 pass
     
     print("🚀 YouTube MP3 Downloader started")
-    print("📡 Using multiple methods for reliable access")
+    print("📡 Using external services for reliable downloads")
     print(f"🔊 Download folder: {DOWNLOAD_FOLDER}")
     
     app.run(debug=False, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
