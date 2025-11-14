@@ -199,19 +199,85 @@ def try_external_download_service(video_id, download_id):
     
     return False
 
-def download_with_fallback(url, download_id):
-    """Try multiple download methods"""
-    video_id = extract_video_id(url)
-    if not video_id:
-        raise Exception("Could not extract video ID from URL")
-    
-    # Method 1: Try external services first
-    print("Trying external download services...")
-    if try_external_download_service(video_id, download_id):
-        return
-    
-    # Method 2: Try yt-dlp with aggressive settings as last resort
-    print("Trying yt-dlp with aggressive settings...")
+def download_with_cookies(url, download_id, video_id):
+    """Download using yt-dlp with cookies"""
+    try:
+        cookies_path = 'cookies.txt'
+        if not os.path.exists(cookies_path):
+            print("Cookies file not found, skipping cookie-based download")
+            return False
+            
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'outtmpl': os.path.join(DOWNLOAD_FOLDER, '%(title)s.%(ext)s'),
+            'cookiefile': cookies_path,
+            'quiet': True,
+            'no_warnings': False,
+            'ignoreerrors': True,
+            'no_check_certificate': True,
+            'progress_hooks': [create_progress_hook(download_id)],
+            'extract_flat': False,
+            'socket_timeout': 30,
+            'retries': 10,
+            'fragment_retries': 10,
+            'skip_unavailable_fragments': True,
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-us,en;q=0.5',
+                'Accept-Encoding': 'gzip,deflate',
+                'Accept-Charset': 'ISO-8859-1,utf-8;q=0.7,*;q=0.7',
+                'Keep-Alive': '300',
+                'Connection': 'keep-alive',
+                'Referer': 'https://www.youtube.com/',
+            }
+        }
+        
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            
+            # Find the downloaded file and convert to MP3 if needed
+            downloaded_files = [f for f in os.listdir(DOWNLOAD_FOLDER) 
+                              if video_id in f and f.endswith(('.m4a', '.webm', '.opus', '.mp3'))]
+            
+            if downloaded_files:
+                original_file = os.path.join(DOWNLOAD_FOLDER, downloaded_files[0])
+                
+                # If it's already MP3, we're done
+                if original_file.endswith('.mp3'):
+                    downloads_progress[download_id]['file'] = original_file
+                    downloads_progress[download_id]['finished'] = True
+                    downloads_progress[download_id]['progress'] = 100
+                    return True
+                
+                # Convert to MP3
+                mp3_file = original_file.rsplit('.', 1)[0] + '.mp3'
+                ffmpeg_path = detect_ffmpeg_path()
+                result = subprocess.run([
+                    ffmpeg_path, '-y', '-i', original_file, 
+                    '-vn', '-acodec', 'libmp3lame', 
+                    '-ab', '192k', '-ar', '44100', 
+                    mp3_file
+                ], capture_output=True, text=True)
+                
+                if result.returncode == 0 and os.path.exists(mp3_file):
+                    # Remove original file
+                    if os.path.exists(original_file):
+                        os.remove(original_file)
+                    
+                    downloads_progress[download_id]['file'] = mp3_file
+                    downloads_progress[download_id]['finished'] = True
+                    downloads_progress[download_id]['progress'] = 100
+                    return True
+        
+        return False
+        
+    except Exception as e:
+        print(f"Cookie-based download failed: {e}")
+        return False
+
+def download_with_aggressive_settings(url, download_id, video_id):
+    """Download using yt-dlp with aggressive settings (no cookies)"""
     try:
         ydl_opts = {
             'format': 'bestaudio/best',
@@ -266,14 +332,36 @@ def download_with_fallback(url, download_id):
                     downloads_progress[download_id]['file'] = mp3_file
                     downloads_progress[download_id]['finished'] = True
                     downloads_progress[download_id]['progress'] = 100
-                    return
+                    return True
         
-        # If we get here, yt-dlp failed
-        raise Exception("All download methods failed")
+        return False
         
     except Exception as e:
-        print(f"yt-dlp download failed: {e}")
-        raise Exception(f"Download failed: {str(e)}")
+        print(f"Aggressive settings download failed: {e}")
+        return False
+
+def download_with_fallback(url, download_id):
+    """Try multiple download methods"""
+    video_id = extract_video_id(url)
+    if not video_id:
+        raise Exception("Could not extract video ID from URL")
+    
+    # Method 1: Try yt-dlp with cookies first (most reliable)
+    print("Trying yt-dlp with cookies...")
+    if download_with_cookies(url, download_id, video_id):
+        return
+    
+    # Method 2: Try external services as fallback
+    print("Trying external download services...")
+    if try_external_download_service(video_id, download_id):
+        return
+    
+    # Method 3: Try yt-dlp with aggressive settings as last resort
+    print("Trying yt-dlp with aggressive settings...")
+    if download_with_aggressive_settings(url, download_id, video_id):
+        return
+    
+    raise Exception("All download methods failed")
 
 def download_to_mp3(url, download_id):
     """Main download function"""
@@ -432,9 +520,24 @@ if __name__ == "__main__":
             except:
                 pass
     
+    # Check if cookies file exists
+    if os.path.exists('cookies.txt'):
+        print("✅ Cookies file found and will be used for downloads")
+        # Verify cookies format
+        try:
+            with open('cookies.txt', 'r') as f:
+                cookie_content = f.read()
+                if 'youtube.com' in cookie_content:
+                    print("✅ YouTube cookies detected in cookies file")
+                else:
+                    print("⚠️  Cookies file exists but may not contain YouTube cookies")
+        except Exception as e:
+            print(f"⚠️  Could not read cookies file: {e}")
+    else:
+        print("⚠️  No cookies.txt file found - downloads may be limited")
+    
     print("🚀 YouTube MP3 Downloader started")
     print("📡 Using external services for reliable downloads")
     print(f"🔊 Download folder: {DOWNLOAD_FOLDER}")
     
     app.run(debug=False, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
-
