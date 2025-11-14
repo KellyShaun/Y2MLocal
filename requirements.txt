@@ -1,5 +1,5 @@
 Flask==2.3.3
 Flask-CORS==4.0.0
-yt-dlp
+yt-dlp==2025.11.12
 requests==2.32.5
 python-dotenv==1.0.0
