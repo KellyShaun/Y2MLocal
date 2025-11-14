@@ -120,23 +120,26 @@ def info():
     url = data.get('url')
     if not url:
         return jsonify({'success': False, 'error': 'No URL provided'})
-
     try:
         info = extract_audio_info(url)
         return jsonify({'success': True, **info})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
-@app.route('/download', methods=['POST'])
-def download():
-    data = request.get_json()
+@app.route('/download-mp3', methods=['POST'])
+def download_mp3():
+    data = request.json
     url = data.get('url')
     if not url:
         return jsonify({'success': False, 'error': 'No URL provided'})
 
     info = extract_audio_info(url)
     if info['already_downloaded']:
-        return jsonify({'success': False, 'error': 'This video has already been downloaded', 'existing_file': os.path.basename(info['file_path'])})
+        return jsonify({
+            'success': False,
+            'error': 'This video has already been downloaded',
+            'existing_file': os.path.basename(info['file_path'])
+        })
 
     download_id = str(uuid.uuid4())
     downloads_progress[download_id] = {'progress': 0, 'finished': False, 'file': None}
@@ -157,8 +160,8 @@ def play_audio(filename):
         return jsonify({'success': False, 'error': 'File not found'}), 404
     return send_file(path, as_attachment=False)
 
-@app.route('/download-file/<filename>')
-def download_file(filename):
+@app.route('/get-file/<filename>')
+def get_file(filename):
     path = os.path.join(DOWNLOAD_FOLDER, filename)
     if not os.path.exists(path):
         return jsonify({'success': False, 'error': 'File not found'}), 404
@@ -173,6 +176,7 @@ def delete_file(filename):
     return jsonify({'success': False, 'error': 'File not found'})
 
 @app.route('/downloads')
+@app.route('/downloads-list')
 def downloads_list():
     files = []
     for f in os.listdir(DOWNLOAD_FOLDER):
