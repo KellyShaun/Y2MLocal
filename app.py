@@ -197,7 +197,8 @@ def _extract_with_invidious(video_id):
                     'file_path': file_path,
                     'already_downloaded': already_downloaded
                 }
-        except:
+        except Exception as e:
+            print(f"Invidious instance {instance} failed: {e}")
             continue
     
     raise Exception("All extraction methods failed")
@@ -234,7 +235,7 @@ def download_to_mp3(url, download_id):
         }
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.download([url])
+            ydl.download([url])
         
         # Find the downloaded file
         temp_dir = tempfile.gettempdir()
