@@ -303,6 +303,7 @@ def download_to_mp3(url, download_id):
 @app.route('/')
 def home():
     return render_template("index.html")
+    
 
 @app.route('/info', methods=['POST'])
 def info():
@@ -436,3 +437,4 @@ if __name__ == "__main__":
     print(f"🔊 Download folder: {DOWNLOAD_FOLDER}")
     
     app.run(debug=False, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+
