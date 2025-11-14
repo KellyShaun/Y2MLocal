@@ -18,7 +18,7 @@ DOWNLOAD_FOLDER = "downloads"
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
 # ----------------------------
-# Invidious API configuration (BYPASSES YOUTUBE RESTRICTIONS)
+# Multiple Invidious instances for redundancy
 # ----------------------------
 INVIDIOUS_INSTANCES = [
     "https://vid.puffyan.us",
@@ -26,7 +26,9 @@ INVIDIOUS_INSTANCES = [
     "https://yt.artemislena.eu",
     "https://invidious.nerdvpn.de",
     "https://y.com.sb",
-    "https://inv.nadeko.net"
+    "https://inv.nadeko.net",
+    "https://invidious.flokinet.to",
+    "https://inv.us.projectsegfau.lt"
 ]
 
 # ----------------------------
@@ -81,7 +83,7 @@ def extract_video_id(url):
     return None
 
 def get_video_info_from_invidious(video_id):
-    """Get video info from Invidious API - much more reliable"""
+    """Get video info from Invidious API - primary method"""
     for instance in INVIDIOUS_INSTANCES:
         try:
             api_url = f"{instance}/api/v1/videos/{video_id}"
@@ -90,16 +92,9 @@ def get_video_info_from_invidious(video_id):
             if response.status_code == 200:
                 data = response.json()
                 
-                # Get the best available audio stream
-                audio_streams = [fmt for fmt in data.get('adaptiveFormats', []) 
-                               if 'audio' in fmt.get('type', '')]
-                
-                if audio_streams:
-                    best_audio = max(audio_streams, key=lambda x: x.get('bitrate', 0))
-                    audio_url = best_audio.get('url')
-                else:
-                    # Fallback to default format
-                    audio_url = None
+                # Check if video is available
+                if data.get('error'):
+                    continue
                 
                 filename = sanitize_filename(f"{data.get('title', 'unknown')}.mp3")
                 file_path = os.path.join(DOWNLOAD_FOLDER, filename)
@@ -114,7 +109,6 @@ def get_video_info_from_invidious(video_id):
                     'file_path': file_path,
                     'already_downloaded': already_downloaded,
                     'video_id': video_id,
-                    'audio_url': audio_url,
                     'source': 'invidious'
                 }
                 print(f"✓ Successfully got info from Invidious: {result['title']}")
@@ -123,77 +117,118 @@ def get_video_info_from_invidious(video_id):
             print(f"Invidious instance {instance} failed: {str(e)}")
             continue
     
-    raise Exception("All Invidious instances failed")
+    return None
 
-def download_audio_from_invidious(video_info, download_id):
-    """Download audio using Invidious streams"""
+def get_video_info_from_youtube_direct(video_id):
+    """Fallback: Try direct YouTube extraction with minimal settings"""
     try:
-        if video_info.get('audio_url'):
-            # Download directly from Invidious audio stream
-            audio_url = video_info['audio_url']
-            temp_file = os.path.join(tempfile.gettempdir(), f"{video_info['video_id']}.audio")
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'quiet': True,
+            'no_warnings': True,
+            'extract_flat': False,
+            'ignoreerrors': True,
+            'no_check_certificate': True,
+            'extract_flat': False,
+        }
+        
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
             
-            # Download with progress
-            response = requests.get(audio_url, stream=True)
-            total_size = int(response.headers.get('content-length', 0))
+            filename = sanitize_filename(f"{info.get('title', 'unknown')}.mp3")
+            file_path = os.path.join(DOWNLOAD_FOLDER, filename)
+            already_downloaded = os.path.exists(file_path)
             
-            with open(temp_file, 'wb') as f:
-                downloaded = 0
-                for chunk in response.iter_content(chunk_size=8192):
-                    if chunk:
-                        f.write(chunk)
-                        downloaded += len(chunk)
-                        if total_size > 0:
-                            progress = (downloaded / total_size) * 100
-                            downloads_progress[download_id]['progress'] = progress
-            
-            # Convert to MP3
-            final_mp3 = video_info['file_path']
-            ffmpeg_path = detect_ffmpeg_path()
-            result = subprocess.run([
-                ffmpeg_path, '-y', '-i', temp_file, 
-                '-vn', '-acodec', 'libmp3lame', 
-                '-ab', '192k', '-ar', '44100', 
-                final_mp3
-            ], capture_output=True, text=True)
-            
-            if result.returncode != 0:
-                raise Exception(f"FFmpeg conversion failed: {result.stderr}")
-            
-            # Clean up
-            if os.path.exists(temp_file):
-                os.remove(temp_file)
-                
-        else:
-            # Fallback to yt-dlp with minimal options
-            ydl_opts = {
-                'format': 'bestaudio/best',
-                'outtmpl': os.path.join(DOWNLOAD_FOLDER, '%(title)s.%(ext)s'),
-                'quiet': True,
-                'no_warnings': True,
-                'progress_hooks': [create_progress_hook(download_id)],
+            return {
+                'title': info.get('title', 'Unknown Title'),
+                'uploader': info.get('uploader', 'Unknown'),
+                'duration': time.strftime('%H:%M:%S', time.gmtime(info.get('duration', 0))),
+                'view_count': info.get('view_count', 0),
+                'thumbnail': info.get('thumbnail'),
+                'file_path': file_path,
+                'already_downloaded': already_downloaded,
+                'video_id': video_id,
+                'source': 'youtube_direct'
             }
-            
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([f"https://www.youtube.com/watch?v={video_info['video_id']}"])
-        
-        downloads_progress[download_id]['file'] = video_info['file_path']
-        downloads_progress[download_id]['finished'] = True
-        downloads_progress[download_id]['progress'] = 100
-        
     except Exception as e:
-        downloads_progress[download_id]['error'] = str(e)
-        downloads_progress[download_id]['finished'] = True
+        print(f"YouTube direct extraction failed: {str(e)}")
+        return None
+
+def get_basic_video_info(video_id):
+    """Final fallback: Get minimal info using public methods"""
+    try:
+        # Try to get basic info from oEmbed
+        oembed_url = f"https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={video_id}&format=json"
+        response = requests.get(oembed_url, timeout=5)
+        
+        if response.status_code == 200:
+            data = response.json()
+            filename = sanitize_filename(f"{data.get('title', 'unknown')}.mp3")
+            file_path = os.path.join(DOWNLOAD_FOLDER, filename)
+            already_downloaded = os.path.exists(file_path)
+            
+            return {
+                'title': data.get('title', 'Unknown Title'),
+                'uploader': data.get('author_name', 'Unknown'),
+                'duration': 'Unknown',
+                'view_count': 0,
+                'thumbnail': f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg",
+                'file_path': file_path,
+                'already_downloaded': already_downloaded,
+                'video_id': video_id,
+                'source': 'oembed'
+            }
+    except:
+        pass
+    
+    # Absolute fallback - just the video ID
+    filename = sanitize_filename(f"video_{video_id}.mp3")
+    file_path = os.path.join(DOWNLOAD_FOLDER, filename)
+    already_downloaded = os.path.exists(file_path)
+    
+    return {
+        'title': f"Video {video_id}",
+        'uploader': 'Unknown',
+        'duration': 'Unknown',
+        'view_count': 0,
+        'thumbnail': f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg",
+        'file_path': file_path,
+        'already_downloaded': already_downloaded,
+        'video_id': video_id,
+        'source': 'fallback'
+    }
+
+def extract_audio_info(url):
+    """Main function to extract video info with multiple fallbacks"""
+    video_id = extract_video_id(url)
+    if not video_id:
+        raise Exception("Could not extract video ID from URL")
+    
+    print(f"Extracting info for video: {video_id}")
+    
+    # Method 1: Try Invidious first
+    info = get_video_info_from_invidious(video_id)
+    if info:
+        return info
+    
+    # Method 2: Try direct YouTube extraction
+    info = get_video_info_from_youtube_direct(video_id)
+    if info:
+        return info
+    
+    # Method 3: Get basic info as last resort
+    info = get_basic_video_info(video_id)
+    return info
 
 def download_to_mp3(url, download_id):
-    """Main download function using Invidious"""
+    """Main download function"""
     try:
         video_id = extract_video_id(url)
         if not video_id:
             raise Exception("Could not extract video ID from URL")
         
-        # Get video info from Invidious
-        video_info = get_video_info_from_invidious(video_id)
+        # Get video info
+        video_info = extract_audio_info(url)
         
         # Check if already downloaded
         if video_info['already_downloaded']:
@@ -202,8 +237,24 @@ def download_to_mp3(url, download_id):
             downloads_progress[download_id]['progress'] = 100
             return
         
-        # Download the audio
-        download_audio_from_invidious(video_info, download_id)
+        # Download using yt-dlp with minimal settings
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'outtmpl': os.path.join(DOWNLOAD_FOLDER, '%(title)s.%(ext)s'),
+            'quiet': True,
+            'no_warnings': True,
+            'progress_hooks': [create_progress_hook(download_id)],
+            'ignoreerrors': True,
+            'no_check_certificate': True,
+        }
+        
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([url])
+        
+        # Update progress
+        downloads_progress[download_id]['file'] = video_info['file_path'].replace('.mp3', '').replace('.m4a', '') + '.mp3'
+        downloads_progress[download_id]['finished'] = True
+        downloads_progress[download_id]['progress'] = 100
         
     except Exception as e:
         downloads_progress[download_id]['error'] = str(e)
@@ -228,11 +279,15 @@ def info():
         return jsonify({'success': False, 'error': 'Please provide a valid YouTube URL'})
     
     try:
-        video_id = extract_video_id(url)
-        if not video_id:
-            return jsonify({'success': False, 'error': 'Invalid YouTube URL'})
+        video_info = extract_audio_info(url)
         
-        video_info = get_video_info_from_invidious(video_id)
+        # If we only have basic info, note that download might not work
+        if video_info['source'] in ['oembed', 'fallback']:
+            video_info['limited_info'] = True
+            video_info['warning'] = 'Limited information available. Download may not work for this video.'
+        else:
+            video_info['limited_info'] = False
+            
         return jsonify({'success': True, **video_info})
         
     except Exception as e:
@@ -240,7 +295,7 @@ def info():
         print(f"Error getting video info: {error_msg}")
         return jsonify({
             'success': False, 
-            'error': 'Could not fetch video info. The video may be unavailable or restricted.'
+            'error': 'Could not fetch video info. The video may be private, unavailable, or restricted in your region.'
         })
 
 @app.route('/download-mp3', methods=['POST'])
@@ -341,7 +396,7 @@ if __name__ == "__main__":
                 pass
     
     print("🚀 YouTube MP3 Downloader started")
-    print("📡 Using Invidious instances for reliable access")
+    print("📡 Using multiple methods for reliable access")
     print(f"🔊 Download folder: {DOWNLOAD_FOLDER}")
     
     app.run(debug=False, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
