@@ -9,7 +9,6 @@ class YouTubeDownloader {
         this.bindEvents();
         this.loadDownloads();
         this.checkClipboard();
-        this.checkCookieStatus();
     }
 
     bindEvents() {
@@ -46,18 +45,6 @@ class YouTubeDownloader {
         return patterns.some(p => p.test(url));
     }
 
-    async checkCookieStatus() {
-        try {
-            const res = await fetch('/cookie-status');
-            const data = await res.json();
-            if (data.success && data.cookies_available) {
-                this.showNotification('Cookies loaded - authentication enabled', 'success');
-            }
-        } catch (err) {
-            // Ignore errors for cookie status check
-        }
-    }
-
     async getVideoInfo(url) {
         try {
             this.showLoading();
@@ -74,13 +61,8 @@ class YouTubeDownloader {
                 document.getElementById('alreadyDownloaded').classList.toggle('hidden', !data.already_downloaded);
             } else {
                 let errorMsg = data.error;
-                if (errorMsg.includes('authentication') || errorMsg.includes('Sign in') || errorMsg.includes('bot')) {
-                    if (data.cookie_status === 'available') {
-                        errorMsg = 'YouTube is requiring authentication. The app is using cookies but this video may still be restricted.';
-                    } else {
-                        errorMsg = 'YouTube is requiring authentication. Some videos may not be accessible without cookies.';
-                    }
-                } else if (errorMsg.includes('Private') || errorMsg.includes('unavailable')) {
+                // Simplified error handling since we're using Invidious now
+                if (errorMsg.includes('Private') || errorMsg.includes('unavailable')) {
                     errorMsg = 'This video is private or unavailable.';
                 } else if (errorMsg.includes('Invalid YouTube URL')) {
                     errorMsg = 'Please enter a valid YouTube URL.';
@@ -133,16 +115,11 @@ class YouTubeDownloader {
                 this.showSuccess('Download started successfully!');
             } else {
                 let errorMsg = data.error;
-                if (errorMsg.includes('authentication') || errorMsg.includes('Sign in') || errorMsg.includes('bot')) {
-                    if (data.cookie_status === 'available') {
-                        errorMsg = 'YouTube is requiring authentication for this video. The app is using cookies but this video may be restricted.';
-                    } else {
-                        errorMsg = 'YouTube is requiring authentication for this video. Some videos require cookies to download.';
-                    }
-                } else if (errorMsg.includes('already been downloaded')) {
+                if (errorMsg.includes('already been downloaded')) {
                     this.showAlreadyDownloaded(data.existing_file);
+                } else {
+                    this.showError(errorMsg);
                 }
-                this.showError(errorMsg);
                 downloadBtn.disabled = false;
                 downloadBtn.innerHTML = '<i class="fas fa-download"></i> Download';
             }
