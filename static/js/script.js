@@ -9,6 +9,7 @@ class YouTubeDownloader {
         this.bindEvents();
         this.loadDownloads();
         this.checkClipboard();
+        this.checkCookieStatus();
     }
 
     bindEvents() {
@@ -45,6 +46,18 @@ class YouTubeDownloader {
         return patterns.some(p => p.test(url));
     }
 
+    async checkCookieStatus() {
+        try {
+            const res = await fetch('/cookie-status');
+            const data = await res.json();
+            if (data.success && data.cookies_available) {
+                this.showNotification('Cookies loaded - authentication enabled', 'success');
+            }
+        } catch (err) {
+            // Ignore errors for cookie status check
+        }
+    }
+
     async getVideoInfo(url) {
         try {
             this.showLoading();
@@ -61,14 +74,18 @@ class YouTubeDownloader {
                 document.getElementById('alreadyDownloaded').classList.toggle('hidden', !data.already_downloaded);
             } else {
                 let errorMsg = data.error;
-                if (errorMsg.includes('authentication') || errorMsg.includes('Sign in')) {
-                    errorMsg = 'YouTube is requiring authentication. Please try a different video or try again in a few minutes.';
+                if (errorMsg.includes('authentication') || errorMsg.includes('Sign in') || errorMsg.includes('bot')) {
+                    if (data.cookie_status === 'available') {
+                        errorMsg = 'YouTube is requiring authentication. The app is using cookies but this video may still be restricted.';
+                    } else {
+                        errorMsg = 'YouTube is requiring authentication. Some videos may not be accessible without cookies.';
+                    }
                 } else if (errorMsg.includes('Private') || errorMsg.includes('unavailable')) {
                     errorMsg = 'This video is private or unavailable.';
                 } else if (errorMsg.includes('Invalid YouTube URL')) {
                     errorMsg = 'Please enter a valid YouTube URL.';
                 } else if (errorMsg.includes('already been downloaded')) {
-                    errorMsg = data.error; // Keep the original message for this case
+                    errorMsg = data.error;
                 }
                 this.showError(errorMsg);
             }
@@ -116,10 +133,13 @@ class YouTubeDownloader {
                 this.showSuccess('Download started successfully!');
             } else {
                 let errorMsg = data.error;
-                if (errorMsg.includes('authentication') || errorMsg.includes('Sign in')) {
-                    errorMsg = 'YouTube is requiring authentication. Please try a different video.';
+                if (errorMsg.includes('authentication') || errorMsg.includes('Sign in') || errorMsg.includes('bot')) {
+                    if (data.cookie_status === 'available') {
+                        errorMsg = 'YouTube is requiring authentication for this video. The app is using cookies but this video may be restricted.';
+                    } else {
+                        errorMsg = 'YouTube is requiring authentication for this video. Some videos require cookies to download.';
+                    }
                 } else if (errorMsg.includes('already been downloaded')) {
-                    // Show special UI for already downloaded files
                     this.showAlreadyDownloaded(data.existing_file);
                 }
                 this.showError(errorMsg);
@@ -135,7 +155,6 @@ class YouTubeDownloader {
     }
 
     showAlreadyDownloaded(filename) {
-        // Create a special notification for already downloaded files
         const notification = document.createElement('div');
         notification.className = 'already-downloaded-notification';
         notification.innerHTML = `
@@ -151,7 +170,6 @@ class YouTubeDownloader {
             </div>
         `;
         
-        // Add some basic styling
         notification.style.cssText = `
             position: fixed;
             top: 20px;
@@ -166,7 +184,6 @@ class YouTubeDownloader {
         
         document.body.appendChild(notification);
         
-        // Auto-remove after 8 seconds
         setTimeout(() => {
             if (notification.parentNode) {
                 notification.remove();
@@ -181,9 +198,7 @@ class YouTubeDownloader {
                 const res = await fetch(`/progress/${this.currentDownloadId}`);
                 const progress = await res.json();
                 
-                // Handle both old and new progress formats
                 if (progress.finished !== undefined) {
-                    // New format
                     this.updateProgress({
                         progress: progress.progress || 0,
                         status: progress.finished ? (progress.error ? 'error' : 'completed') : 'downloading',
@@ -196,7 +211,7 @@ class YouTubeDownloader {
                             this.showError('Download failed: ' + progress.error);
                         } else {
                             this.showSuccess('Download completed!');
-                            this.loadDownloads(); // refresh downloads
+                            this.loadDownloads();
                         }
                         document.getElementById('downloadBtn').disabled = false;
                         document.getElementById('downloadBtn').innerHTML = '<i class="fas fa-download"></i> Download';
@@ -206,14 +221,13 @@ class YouTubeDownloader {
                         }, 3000);
                     }
                 } else {
-                    // Old format (for backward compatibility)
                     this.updateProgress(progress);
 
                     if (progress.status === 'completed' || progress.status === 'error') {
                         clearInterval(this.progressInterval);
                         if (progress.status === 'completed') {
                             this.showSuccess('Download completed!');
-                            this.loadDownloads(); // refresh downloads
+                            this.loadDownloads();
                         } else {
                             this.showError('Download failed: ' + progress.error);
                         }
@@ -227,7 +241,6 @@ class YouTubeDownloader {
                 }
             } catch (err) {
                 console.error('Error monitoring progress:', err);
-                // Don't show error to user for monitoring failures
             }
         }, 1000);
     }
@@ -375,7 +388,6 @@ class YouTubeDownloader {
             if (data.success) {
                 this.showSuccess('File deleted successfully!');
                 this.loadDownloads();
-                // Stop audio if currently playing this file
                 const audioPlayer = document.getElementById('audioPlayer');
                 if (audioPlayer && audioPlayer.src.includes(filename)) {
                     this.stopAudio();
@@ -428,7 +440,6 @@ class YouTubeDownloader {
     }
 
     showError(msg) {
-        // Use a more user-friendly notification system
         this.showNotification(msg, 'error');
     }
 
@@ -437,7 +448,6 @@ class YouTubeDownloader {
     }
 
     showNotification(msg, type = 'info') {
-        // Create a nice notification instead of alert()
         const notification = document.createElement('div');
         notification.className = `notification notification-${type}`;
         notification.innerHTML = `
@@ -450,7 +460,6 @@ class YouTubeDownloader {
             </div>
         `;
         
-        // Add basic styling
         notification.style.cssText = `
             position: fixed;
             top: 20px;
@@ -468,7 +477,6 @@ class YouTubeDownloader {
         
         document.body.appendChild(notification);
         
-        // Auto-remove after 5 seconds
         setTimeout(() => {
             if (notification.parentNode) {
                 notification.remove();
@@ -514,7 +522,7 @@ function deleteFile(filename) {
     downloader.deleteFile(filename); 
 }
 
-// Add some basic CSS for notifications
+// Add CSS for notifications
 const notificationStyles = `
 @keyframes slideInRight {
     from {
