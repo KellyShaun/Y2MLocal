@@ -59,11 +59,15 @@ class YouTubeDownloader {
             if (data.success) {
                 this.displayVideoInfo(data);
                 document.getElementById('alreadyDownloaded').classList.toggle('hidden', !data.already_downloaded);
+                
+                // Show warning if limited info
+                if (data.limited_info) {
+                    this.showNotification(data.warning || 'Limited information available for this video', 'info');
+                }
             } else {
                 let errorMsg = data.error;
-                // Simplified error handling since we're using Invidious now
                 if (errorMsg.includes('Private') || errorMsg.includes('unavailable')) {
-                    errorMsg = 'This video is private or unavailable.';
+                    errorMsg = 'This video is private, unavailable, or restricted in your region.';
                 } else if (errorMsg.includes('Invalid YouTube URL')) {
                     errorMsg = 'Please enter a valid YouTube URL.';
                 } else if (errorMsg.includes('already been downloaded')) {
@@ -550,6 +554,55 @@ const notificationStyles = `
 
 .play-existing-btn:hover, .download-existing-btn:hover {
     background: #1976d2;
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* Loading spinner styles */
+.loading-spinner {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid #3498db;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Progress bar styles */
+.progress-bar {
+    width: 100%;
+    height: 20px;
+    background-color: #f0f0f0;
+    border-radius: 10px;
+    overflow: hidden;
+    margin: 10px 0;
+}
+
+.progress-fill {
+    height: 100%;
+    background-color: #4CAF50;
+    transition: width 0.3s ease;
+    border-radius: 10px;
+}
+
+.progress-text {
+    text-align: center;
+    font-weight: bold;
+    margin: 5px 0;
+}
+
+.progress-status {
+    text-align: center;
+    color: #666;
+    font-size: 14px;
 }
 `;
 
