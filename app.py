@@ -14,10 +14,11 @@ app = Flask(__name__)
 CORS(app)
 
 DOWNLOAD_FOLDER = "downloads"
+COOKIES_FILE = "cookies.txt"
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
 # ----------------------------
-# Enhanced yt-dlp configuration for free tier
+# Enhanced yt-dlp configuration with cookie support
 # ----------------------------
 def get_random_user_agent():
     user_agents = [
@@ -31,7 +32,7 @@ def get_random_user_agent():
     return random.choice(user_agents)
 
 def get_ydl_opts():
-    return {
+    base_opts = {
         'format': 'bestaudio/best',
         'quiet': True,
         'no_warnings': False,
@@ -54,11 +55,17 @@ def get_ydl_opts():
                 'player_skip': ['configs', 'webpage'],
             }
         },
-        # Critical for free tier - reduce fingerprinting
         'no_part': True,
         'no_overwrites': True,
         'continue_dl': False,
     }
+    
+    # Add cookies if available
+    if os.path.exists(COOKIES_FILE):
+        base_opts['cookiefile'] = COOKIES_FILE
+        print(f"Using cookies from {COOKIES_FILE}")
+    
+    return base_opts
 
 # ----------------------------
 # In-memory progress tracking
@@ -69,7 +76,6 @@ downloads_progress = {}
 # Utility functions
 # ----------------------------
 def detect_ffmpeg_path():
-    # Render free tier usually has ffmpeg in PATH
     return "ffmpeg"
 
 def sanitize_filename(filename):
@@ -112,32 +118,16 @@ def extract_video_id(url):
             return match.group(1)
     return None
 
-def extract_audio_info_with_fallback(url):
-    """Try multiple extraction methods with fallbacks"""
-    video_id = extract_video_id(url)
-    if not video_id:
-        raise Exception("Invalid YouTube URL - could not extract video ID")
-    
-    methods = [
-        _extract_with_standard_method,
-        _extract_with_mobile_method,
-        _extract_with_minimal_method
-    ]
-    
-    last_error = None
-    for method in methods:
-        try:
-            return method(url, video_id)
-        except Exception as e:
-            last_error = e
-            time.sleep(1)  # Small delay between attempts
-            continue
-    
-    # If all methods fail, try Invidious as last resort
-    try:
-        return _extract_with_invidious(video_id)
-    except Exception as e:
-        raise last_error or e
+# Extraction methods
+def _extract_with_cookies_method(url, video_id):
+    """Extraction method using cookies for authentication"""
+    ydl_opts = get_ydl_opts()
+    # Force cookies for this method
+    if os.path.exists(COOKIES_FILE):
+        ydl_opts['cookiefile'] = COOKIES_FILE
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(url, download=False)
+        return _process_video_info(info)
 
 def _extract_with_standard_method(url, video_id):
     """Standard extraction method"""
@@ -203,6 +193,40 @@ def _extract_with_invidious(video_id):
     
     raise Exception("All extraction methods failed")
 
+def extract_audio_info_with_fallback(url):
+    """Try multiple extraction methods with fallbacks - cookies first"""
+    video_id = extract_video_id(url)
+    if not video_id:
+        raise Exception("Invalid YouTube URL - could not extract video ID")
+    
+    # Try cookies method first if cookies file exists
+    methods = []
+    if os.path.exists(COOKIES_FILE):
+        methods.append(_extract_with_cookies_method)
+    
+    # Add other methods
+    methods.extend([
+        _extract_with_standard_method,
+        _extract_with_mobile_method,
+        _extract_with_minimal_method
+    ])
+    
+    last_error = None
+    for method in methods:
+        try:
+            return method(url, video_id)
+        except Exception as e:
+            last_error = e
+            print(f"Extraction method {method.__name__} failed: {str(e)}")
+            time.sleep(1)  # Small delay between attempts
+            continue
+    
+    # If all methods fail, try Invidious as last resort
+    try:
+        return _extract_with_invidious(video_id)
+    except Exception as e:
+        raise last_error or e
+
 def _process_video_info(info):
     """Process video info into standardized format"""
     filename = sanitize_filename(f"{info.get('title', 'unknown')}.mp3")
@@ -222,7 +246,7 @@ def _process_video_info(info):
 
 def download_to_mp3(url, download_id):
     try:
-        # Use minimal method for download (most reliable)
+        # Use cookies method for download if available
         ydl_opts = {
             'format': 'bestaudio/best',
             'quiet': True,
@@ -233,6 +257,10 @@ def download_to_mp3(url, download_id):
             'outtmpl': os.path.join(tempfile.gettempdir(), '%(title)s.%(ext)s'),
             'progress_hooks': [create_progress_hook(download_id)]
         }
+        
+        # Add cookies if available
+        if os.path.exists(COOKIES_FILE):
+            ydl_opts['cookiefile'] = COOKIES_FILE
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
@@ -294,8 +322,14 @@ def info():
         return jsonify({'success': True, **info})
     except Exception as e:
         error_msg = str(e)
-        if "Sign in" in error_msg:
-            return jsonify({'success': False, 'error': 'YouTube is requiring authentication. Please try a different video or try again in a few minutes.'})
+        if "Sign in" in error_msg or "bot" in error_msg:
+            cookie_status = "available" if os.path.exists(COOKIES_FILE) else "not found"
+            return jsonify({
+                'success': False, 
+                'error': 'YouTube is requiring authentication.', 
+                'cookie_status': cookie_status,
+                'suggestion': 'The app will try to use cookies if available, but some videos may still be restricted.'
+            })
         elif "Private" in error_msg or "unavailable" in error_msg:
             return jsonify({'success': False, 'error': 'This video is private or unavailable.'})
         else:
@@ -323,8 +357,13 @@ def download_mp3():
         return jsonify({'success': True, 'download_id': download_id})
     except Exception as e:
         error_msg = str(e)
-        if "Sign in" in error_msg:
-            return jsonify({'success': False, 'error': 'YouTube is requiring authentication. Please try a different video.'})
+        if "Sign in" in error_msg or "bot" in error_msg:
+            cookie_status = "available" if os.path.exists(COOKIES_FILE) else "not found"
+            return jsonify({
+                'success': False, 
+                'error': 'YouTube is requiring authentication for this video.', 
+                'cookie_status': cookie_status
+            })
         else:
             return jsonify({'success': False, 'error': error_msg})
 
@@ -377,6 +416,17 @@ def downloads_list():
     # Sort by modification time (newest first)
     files.sort(key=lambda x: x['modified'], reverse=True)
     return jsonify({'success': True, 'downloads': files})
+
+@app.route('/cookie-status')
+def cookie_status():
+    """Check if cookies are available and working"""
+    has_cookies = os.path.exists(COOKIES_FILE)
+    status = "available" if has_cookies else "not found"
+    return jsonify({
+        'success': True, 
+        'cookies_available': has_cookies,
+        'status': status
+    })
 
 # Health check endpoint
 @app.route('/health')
