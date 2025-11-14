@@ -60,11 +60,21 @@ class YouTubeDownloader {
                 this.displayVideoInfo(data);
                 document.getElementById('alreadyDownloaded').classList.toggle('hidden', !data.already_downloaded);
             } else {
-                this.showError('Could not fetch video info: ' + data.error);
+                let errorMsg = data.error;
+                if (errorMsg.includes('authentication') || errorMsg.includes('Sign in')) {
+                    errorMsg = 'YouTube is requiring authentication. Please try a different video or try again in a few minutes.';
+                } else if (errorMsg.includes('Private') || errorMsg.includes('unavailable')) {
+                    errorMsg = 'This video is private or unavailable.';
+                } else if (errorMsg.includes('Invalid YouTube URL')) {
+                    errorMsg = 'Please enter a valid YouTube URL.';
+                } else if (errorMsg.includes('already been downloaded')) {
+                    errorMsg = data.error; // Keep the original message for this case
+                }
+                this.showError(errorMsg);
             }
         } catch (err) {
             this.hideLoading();
-            this.showError('Error fetching video info: ' + err.message);
+            this.showError('Network error. Please check your connection and try again.');
         }
     }
 
@@ -105,16 +115,63 @@ class YouTubeDownloader {
                 this.monitorProgress();
                 this.showSuccess('Download started successfully!');
             } else {
-                this.showError(data.error);
+                let errorMsg = data.error;
+                if (errorMsg.includes('authentication') || errorMsg.includes('Sign in')) {
+                    errorMsg = 'YouTube is requiring authentication. Please try a different video.';
+                } else if (errorMsg.includes('already been downloaded')) {
+                    // Show special UI for already downloaded files
+                    this.showAlreadyDownloaded(data.existing_file);
+                }
+                this.showError(errorMsg);
                 downloadBtn.disabled = false;
                 downloadBtn.innerHTML = '<i class="fas fa-download"></i> Download';
             }
         } catch (err) {
             this.hideLoading();
-            this.showError('Error starting download: ' + err.message);
+            this.showError('Network error. Please check your connection and try again.');
             document.getElementById('downloadBtn').disabled = false;
             document.getElementById('downloadBtn').innerHTML = '<i class="fas fa-download"></i> Download';
         }
+    }
+
+    showAlreadyDownloaded(filename) {
+        // Create a special notification for already downloaded files
+        const notification = document.createElement('div');
+        notification.className = 'already-downloaded-notification';
+        notification.innerHTML = `
+            <div class="notification-content">
+                <i class="fas fa-info-circle"></i>
+                <span>This video was already downloaded!</span>
+                <button onclick="playFile('${filename}', '${this.escapeHtml(filename.replace('.mp3', ''))}')" class="play-existing-btn">
+                    <i class="fas fa-play"></i> Play
+                </button>
+                <button onclick="downloadFile('${filename}')" class="download-existing-btn">
+                    <i class="fas fa-download"></i> Download
+                </button>
+            </div>
+        `;
+        
+        // Add some basic styling
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #e3f2fd;
+            border: 2px solid #2196f3;
+            border-radius: 8px;
+            padding: 15px;
+            z-index: 1000;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        `;
+        
+        document.body.appendChild(notification);
+        
+        // Auto-remove after 8 seconds
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.remove();
+            }
+        }, 8000);
     }
 
     async monitorProgress() {
@@ -123,25 +180,54 @@ class YouTubeDownloader {
             try {
                 const res = await fetch(`/progress/${this.currentDownloadId}`);
                 const progress = await res.json();
-                this.updateProgress(progress);
+                
+                // Handle both old and new progress formats
+                if (progress.finished !== undefined) {
+                    // New format
+                    this.updateProgress({
+                        progress: progress.progress || 0,
+                        status: progress.finished ? (progress.error ? 'error' : 'completed') : 'downloading',
+                        error: progress.error
+                    });
 
-                if (progress.status === 'completed' || progress.status === 'error') {
-                    clearInterval(this.progressInterval);
-                    if (progress.status === 'completed') {
-                        this.showSuccess('Download completed!');
-                        this.loadDownloads(); // refresh downloads
-                    } else {
-                        this.showError('Download failed: ' + progress.error);
+                    if (progress.finished) {
+                        clearInterval(this.progressInterval);
+                        if (progress.error) {
+                            this.showError('Download failed: ' + progress.error);
+                        } else {
+                            this.showSuccess('Download completed!');
+                            this.loadDownloads(); // refresh downloads
+                        }
+                        document.getElementById('downloadBtn').disabled = false;
+                        document.getElementById('downloadBtn').innerHTML = '<i class="fas fa-download"></i> Download';
+                        setTimeout(() => {
+                            this.hideProgressSection();
+                            this.currentDownloadId = null;
+                        }, 3000);
                     }
-                    document.getElementById('downloadBtn').disabled = false;
-                    document.getElementById('downloadBtn').innerHTML = '<i class="fas fa-download"></i> Download';
-                    setTimeout(() => {
-                        this.hideProgressSection();
-                        this.currentDownloadId = null;
-                    }, 2000);
+                } else {
+                    // Old format (for backward compatibility)
+                    this.updateProgress(progress);
+
+                    if (progress.status === 'completed' || progress.status === 'error') {
+                        clearInterval(this.progressInterval);
+                        if (progress.status === 'completed') {
+                            this.showSuccess('Download completed!');
+                            this.loadDownloads(); // refresh downloads
+                        } else {
+                            this.showError('Download failed: ' + progress.error);
+                        }
+                        document.getElementById('downloadBtn').disabled = false;
+                        document.getElementById('downloadBtn').innerHTML = '<i class="fas fa-download"></i> Download';
+                        setTimeout(() => {
+                            this.hideProgressSection();
+                            this.currentDownloadId = null;
+                        }, 3000);
+                    }
                 }
             } catch (err) {
                 console.error('Error monitoring progress:', err);
+                // Don't show error to user for monitoring failures
             }
         }, 1000);
     }
@@ -150,26 +236,43 @@ class YouTubeDownloader {
         const progressFill = document.getElementById('progressFill');
         const progressText = document.getElementById('progressText');
         const progressStatus = document.getElementById('progressStatus');
-        progressFill.style.width = `${progress.progress}%`;
-        progressText.textContent = `${Math.round(progress.progress)}%`;
-        progressStatus.textContent = progress.status === 'downloading' ? 'Downloading...' :
-                                     progress.status === 'completed' ? 'Completed!' :
-                                     progress.status === 'error' ? 'Error occurred' : 'Processing...';
+        
+        if (progressFill) {
+            progressFill.style.width = `${progress.progress}%`;
+        }
+        if (progressText) {
+            progressText.textContent = `${Math.round(progress.progress)}%`;
+        }
+        if (progressStatus) {
+            progressStatus.textContent = progress.status === 'downloading' ? 'Downloading...' :
+                                       progress.status === 'completed' ? 'Completed!' :
+                                       progress.status === 'error' ? 'Error occurred' : 'Processing...';
+        }
     }
 
     showProgressSection() {
-        document.getElementById('progressSection').classList.remove('hidden');
+        const progressSection = document.getElementById('progressSection');
+        if (progressSection) {
+            progressSection.classList.remove('hidden');
+        }
     }
 
     hideProgressSection() {
-        document.getElementById('progressSection').classList.add('hidden');
+        const progressSection = document.getElementById('progressSection');
+        if (progressSection) {
+            progressSection.classList.add('hidden');
+        }
     }
 
     async loadDownloads() {
         try {
-            const res = await fetch('/downloads-list'); // <- new endpoint you need in Flask
+            const res = await fetch('/downloads-list');
             const data = await res.json();
-            if (data.success) this.displayDownloads(data.downloads);
+            if (data.success) {
+                this.displayDownloads(data.downloads);
+            } else {
+                console.error('Failed to load downloads:', data.error);
+            }
         } catch (err) {
             console.error('Error loading downloads:', err);
         }
@@ -177,24 +280,32 @@ class YouTubeDownloader {
 
     displayDownloads(downloads) {
         const list = document.getElementById('downloadsList');
-        if (!downloads.length) {
+        if (!list) return;
+
+        if (!downloads || !downloads.length) {
             list.innerHTML = `<div class="empty-state"><i class="fas fa-music"></i><p>No downloads yet.</p></div>`;
             return;
         }
+        
         list.innerHTML = downloads.map(d => `
             <div class="download-item">
                 <div class="download-info">
                     <h4>${this.escapeHtml(d.name)}</h4>
                     <div class="download-meta">
                         <span><i class="fas fa-hdd"></i> ${d.size_formatted || this.formatFileSize(d.size)}</span>
-                        <span><i class="fas fa-clock"></i> ${d.duration_formatted || 'Unknown'}</span>
                         <span><i class="fas fa-calendar"></i> ${d.modified_formatted || this.formatDate(d.modified)}</span>
                     </div>
                 </div>
                 <div class="download-actions">
-                    <button class="action-btn play-btn" onclick="playFile('${d.filename}', '${this.escapeHtml(d.name)}')"><i class="fas fa-play"></i> Play</button>
-                    <button class="action-btn download-btn" onclick="downloadFile('${d.filename}')"><i class="fas fa-download"></i> Download</button>
-                    <button class="action-btn delete-btn" onclick="deleteFile('${d.filename}')"><i class="fas fa-trash"></i> Delete</button>
+                    <button class="action-btn play-btn" onclick="playFile('${d.filename}', '${this.escapeHtml(d.name)}')">
+                        <i class="fas fa-play"></i> Play
+                    </button>
+                    <button class="action-btn download-btn" onclick="downloadFile('${d.filename}')">
+                        <i class="fas fa-download"></i> Download
+                    </button>
+                    <button class="action-btn delete-btn" onclick="deleteFile('${d.filename}')">
+                        <i class="fas fa-trash"></i> Delete
+                    </button>
                 </div>
             </div>
         `).join('');
@@ -204,56 +315,166 @@ class YouTubeDownloader {
         const audioPlayer = document.getElementById('audioPlayer');
         const nowPlaying = document.getElementById('nowPlayingTitle');
         const section = document.getElementById('audioPlayerSection');
+        
+        if (!audioPlayer || !nowPlaying || !section) return;
+
         audioPlayer.src = `/play-audio/${filename}`;
         nowPlaying.textContent = title;
         section.classList.remove('hidden');
-        audioPlayer.play().catch(() => {});
+        
+        audioPlayer.play().catch((err) => {
+            console.error('Error playing audio:', err);
+            this.showError('Error playing audio. Please try downloading the file instead.');
+        });
+        
         this.showSuccess(`Now playing: ${title}`);
     }
 
     stopAudio() {
         const audioPlayer = document.getElementById('audioPlayer');
-        audioPlayer.pause();
-        audioPlayer.currentTime = 0;
+        const section = document.getElementById('audioPlayerSection');
+        
+        if (audioPlayer) {
+            audioPlayer.pause();
+            audioPlayer.currentTime = 0;
+        }
+        if (section) {
+            section.classList.add('hidden');
+        }
     }
 
     async downloadFile(filename) {
-        const res = await fetch(`/get-file/${filename}`);
-        if (res.ok) {
-            const blob = await res.blob();
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url; a.download = filename; a.click();
-            window.URL.revokeObjectURL(url);
-            this.showSuccess('File download started!');
-        } else {
-            const err = await res.json();
-            this.showError(err.error);
+        try {
+            const res = await fetch(`/get-file/${filename}`);
+            if (res.ok) {
+                const blob = await res.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+                this.showSuccess('Download started!');
+            } else {
+                const err = await res.json();
+                this.showError(err.error || 'Failed to download file');
+            }
+        } catch (err) {
+            this.showError('Network error downloading file');
         }
     }
 
     async deleteFile(filename) {
-        if (!confirm('Are you sure?')) return;
-        const res = await fetch(`/delete/${filename}`, { method: 'DELETE' });
-        const data = await res.json();
-        if (data.success) {
-            this.showSuccess('Deleted successfully!');
-            this.loadDownloads();
-            if (document.getElementById('audioPlayer').src.includes(filename)) {
-                this.stopAudio();
-                document.getElementById('audioPlayerSection').classList.add('hidden');
+        if (!confirm('Are you sure you want to delete this file?')) return;
+        
+        try {
+            const res = await fetch(`/delete/${filename}`, { method: 'DELETE' });
+            const data = await res.json();
+            if (data.success) {
+                this.showSuccess('File deleted successfully!');
+                this.loadDownloads();
+                // Stop audio if currently playing this file
+                const audioPlayer = document.getElementById('audioPlayer');
+                if (audioPlayer && audioPlayer.src.includes(filename)) {
+                    this.stopAudio();
+                }
+            } else {
+                this.showError(data.error || 'Failed to delete file');
             }
-        } else this.showError(data.error);
+        } catch (err) {
+            this.showError('Network error deleting file');
+        }
     }
 
-    formatFileSize(bytes) { const sizes = ['Bytes','KB','MB','GB']; if(bytes===0) return '0 Bytes'; const i=Math.floor(Math.log(bytes)/Math.log(1024)); return (bytes/Math.pow(1024,i)).toFixed(2)+' '+sizes[i]; }
-    formatDate(ts) { return new Date(ts*1000).toLocaleDateString(); }
-    formatViews(v) { return v>=1e6 ? (v/1e6).toFixed(1)+'M' : v>=1e3 ? (v/1e3).toFixed(1)+'K' : v; }
-    escapeHtml(s) { return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#039;"); }
-    showLoading() { document.getElementById('loadingSpinner').classList.remove('hidden'); }
-    hideLoading() { document.getElementById('loadingSpinner').classList.add('hidden'); }
-    showError(msg) { alert('Error: '+msg); }
-    showSuccess(msg) { alert('Success: '+msg); }
+    // Utility methods
+    formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(1024));
+        return (bytes / Math.pow(1024, i)).toFixed(2) + ' ' + sizes[i];
+    }
+
+    formatDate(ts) {
+        return new Date(ts * 1000).toLocaleDateString();
+    }
+
+    formatViews(v) {
+        if (v >= 1e9) return (v / 1e9).toFixed(1) + 'B';
+        if (v >= 1e6) return (v / 1e6).toFixed(1) + 'M';
+        if (v >= 1e3) return (v / 1e3).toFixed(1) + 'K';
+        return v;
+    }
+
+    escapeHtml(s) {
+        const div = document.createElement('div');
+        div.textContent = s;
+        return div.innerHTML;
+    }
+
+    showLoading() {
+        const loadingSpinner = document.getElementById('loadingSpinner');
+        if (loadingSpinner) {
+            loadingSpinner.classList.remove('hidden');
+        }
+    }
+
+    hideLoading() {
+        const loadingSpinner = document.getElementById('loadingSpinner');
+        if (loadingSpinner) {
+            loadingSpinner.classList.add('hidden');
+        }
+    }
+
+    showError(msg) {
+        // Use a more user-friendly notification system
+        this.showNotification(msg, 'error');
+    }
+
+    showSuccess(msg) {
+        this.showNotification(msg, 'success');
+    }
+
+    showNotification(msg, type = 'info') {
+        // Create a nice notification instead of alert()
+        const notification = document.createElement('div');
+        notification.className = `notification notification-${type}`;
+        notification.innerHTML = `
+            <div class="notification-content">
+                <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'}"></i>
+                <span>${msg}</span>
+                <button class="notification-close" onclick="this.parentElement.parentElement.remove()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        `;
+        
+        // Add basic styling
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: ${type === 'success' ? '#d4edda' : type === 'error' ? '#f8d7da' : '#d1ecf1'};
+            border: 2px solid ${type === 'success' ? '#c3e6cb' : type === 'error' ? '#f5c6cb' : '#bee5eb'};
+            color: ${type === 'success' ? '#155724' : type === 'error' ? '#721c24' : '#0c5460'};
+            border-radius: 8px;
+            padding: 15px;
+            z-index: 1000;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            max-width: 400px;
+            animation: slideInRight 0.3s ease-out;
+        `;
+        
+        document.body.appendChild(notification);
+        
+        // Auto-remove after 5 seconds
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.remove();
+            }
+        }, 5000);
+    }
 
     async checkClipboard() {
         try {
@@ -262,18 +483,101 @@ class YouTubeDownloader {
                 document.getElementById('youtubeUrl').value = text;
                 this.getVideoInfo(text);
             }
-        } catch {}
+        } catch (err) {
+            // Clipboard access not available, ignore
+        }
     }
 }
 
-// Global helpers
-function startDownload() { downloader.startDownload(); }
-function refreshDownloads() { downloader.loadDownloads(); }
-function playFile(filename, title) { downloader.playAudio(filename, title); }
-function stopAudio() { downloader.stopAudio(); }
-function downloadFile(filename) { downloader.downloadFile(filename); }
-function deleteFile(filename) { downloader.deleteFile(filename); }
+// Global helper functions
+function startDownload() { 
+    downloader.startDownload(); 
+}
 
-// Initialize
-const downloader = new YouTubeDownloader();
-setInterval(() => downloader.loadDownloads(), 30000);
+function refreshDownloads() { 
+    downloader.loadDownloads(); 
+}
+
+function playFile(filename, title) { 
+    downloader.playAudio(filename, title); 
+}
+
+function stopAudio() { 
+    downloader.stopAudio(); 
+}
+
+function downloadFile(filename) { 
+    downloader.downloadFile(filename); 
+}
+
+function deleteFile(filename) { 
+    downloader.deleteFile(filename); 
+}
+
+// Add some basic CSS for notifications
+const notificationStyles = `
+@keyframes slideInRight {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+.notification-content {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.notification-close {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px;
+    margin-left: auto;
+    opacity: 0.7;
+}
+
+.notification-close:hover {
+    opacity: 1;
+}
+
+.already-downloaded-notification .notification-content {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.play-existing-btn, .download-existing-btn {
+    background: #2196f3;
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.play-existing-btn:hover, .download-existing-btn:hover {
+    background: #1976d2;
+}
+`;
+
+// Inject styles
+const styleSheet = document.createElement('style');
+styleSheet.textContent = notificationStyles;
+document.head.appendChild(styleSheet);
+
+// Initialize the downloader when DOM is loaded
+let downloader;
+document.addEventListener('DOMContentLoaded', () => {
+    downloader = new YouTubeDownloader();
+    
+    // Auto-refresh downloads every 30 seconds
+    setInterval(() => downloader.loadDownloads(), 30000);
+});
