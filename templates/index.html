@@ -5,97 +5,88 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>YouTube to MP3 Downloader</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
     <div class="container">
         <header>
-            <h1><i class="fab fa-youtube"></i> YouTube to MP3 Downloader</h1>
-            <p>Convert and download YouTube videos as high-quality MP3 files</p>
+            <h1><i class="fas fa-music"></i> YouTube to MP3 Downloader</h1>
+            <p>Convert YouTube videos to MP3 audio files instantly</p>
         </header>
 
-        <div class="main-content">
-            <!-- Download Section -->
-            <div class="download-section">
-                <div class="input-group">
+        <main>
+            <div class="input-section">
+                <div class="url-input-container">
                     <input type="text" id="youtubeUrl" placeholder="Paste YouTube URL here..." autocomplete="off">
                     <button id="downloadBtn" onclick="startDownload()">
                         <i class="fas fa-download"></i> Download
                     </button>
                 </div>
-                <div class="url-examples">
-                    <small>Examples: https://www.youtube.com/watch?v=... or https://youtu.be/...</small>
+                <div id="loadingSpinner" class="loading-spinner hidden">
+                    <i class="fas fa-spinner fa-spin"></i> Processing...
                 </div>
             </div>
 
             <!-- Video Info Section -->
             <div id="videoInfo" class="video-info hidden">
-                <div class="info-card">
+                <div class="video-thumbnail">
                     <img id="videoThumbnail" src="" alt="Video thumbnail">
-                    <div class="info-content">
-                        <h3 id="videoTitle"></h3>
-                        <div class="info-details">
-                            <span><i class="fas fa-user"></i> <span id="videoUploader"></span></span>
-                            <span><i class="fas fa-clock"></i> <span id="videoDuration"></span></span>
-                            <span><i class="fas fa-eye"></i> <span id="videoViews"></span></span>
-                        </div>
-                        <div id="alreadyDownloaded" class="already-downloaded hidden">
-                            <i class="fas fa-check-circle"></i> Already Downloaded
-                        </div>
+                </div>
+                <div class="video-details">
+                    <h3 id="videoTitle">Video Title</h3>
+                    <div class="video-meta">
+                        <span><i class="fas fa-user"></i> <span id="videoUploader">Uploader</span></span>
+                        <span><i class="fas fa-clock"></i> <span id="videoDuration">00:00</span></span>
+                        <span><i class="fas fa-eye"></i> <span id="videoViews">0</span> views</span>
                     </div>
                 </div>
+            </div>
+
+            <div id="alreadyDownloaded" class="already-downloaded hidden">
+                <i class="fas fa-info-circle"></i>
+                This video has already been downloaded
             </div>
 
             <!-- Progress Section -->
             <div id="progressSection" class="progress-section hidden">
-                <div class="progress-card">
-                    <h4>Download Progress</h4>
-                    <div class="progress-bar">
-                        <div id="progressFill" class="progress-fill"></div>
-                    </div>
-                    <div class="progress-info">
-                        <span id="progressText">0%</span>
-                        <span id="progressStatus">Preparing...</span>
-                    </div>
+                <div class="progress-bar">
+                    <div id="progressFill" class="progress-fill"></div>
                 </div>
+                <div id="progressText" class="progress-text">0%</div>
+                <div id="progressStatus" class="progress-status">Starting...</div>
             </div>
 
             <!-- Audio Player Section -->
             <div id="audioPlayerSection" class="audio-player-section hidden">
-                <div class="player-card">
-                    <h4><i class="fas fa-music"></i> Now Playing</h4>
-                    <div class="player-controls">
-                        <audio id="audioPlayer" controls>
-                            Your browser does not support the audio element.
-                        </audio>
-                        <div class="player-info">
-                            <span id="nowPlayingTitle">Select a song to play</span>
-                        </div>
-                    </div>
+                <h3><i class="fas fa-headphones"></i> Now Playing</h3>
+                <div class="now-playing">
+                    <span id="nowPlayingTitle">Track Name</span>
+                    <button onclick="stopAudio()" class="stop-btn">
+                        <i class="fas fa-stop"></i> Stop
+                    </button>
                 </div>
+                <audio id="audioPlayer" controls>
+                    Your browser does not support the audio element.
+                </audio>
             </div>
 
             <!-- Downloads List -->
             <div class="downloads-section">
                 <div class="section-header">
-                    <h2><i class="fas fa-music"></i> Your Music Library</h2>
+                    <h2><i class="fas fa-download"></i> Your Downloads</h2>
                     <button onclick="refreshDownloads()" class="refresh-btn">
                         <i class="fas fa-sync-alt"></i> Refresh
                     </button>
                 </div>
                 <div id="downloadsList" class="downloads-list">
-                    <div class="empty-state">
-                        <i class="fas fa-music"></i>
-                        <p>No downloads yet. Convert your first YouTube video above!</p>
-                    </div>
+                    <!-- Downloads will be populated here -->
                 </div>
             </div>
-        </div>
-    </div>
+        </main>
 
-    <!-- Loading Spinner -->
-    <div id="loadingSpinner" class="loading-spinner hidden">
-        <div class="spinner"></div>
+        <footer>
+            <p>&copy; 2025 YouTube MP3 Downloader. For educational purposes.</p>
+        </footer>
     </div>
 
     <script src="{{ url_for('static', filename='js/script.js') }}"></script>
