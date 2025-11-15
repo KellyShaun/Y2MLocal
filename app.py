@@ -2,6 +2,7 @@ import os
 import time
 import requests
 import re
+import json
 from flask import Flask, request, send_file, jsonify, render_template
 from flask_cors import CORS
 
@@ -81,6 +82,103 @@ def video_info():
     
     return jsonify(info)
 
+@app.route('/convert', methods=['POST'])
+def convert_video():
+    """Convert YouTube video using external APIs"""
+    data = request.json
+    video_url = data.get('url', '')
+    service = data.get('service', '')
+    
+    if not video_url:
+        return jsonify({'success': False, 'error': 'No URL provided'})
+    
+    video_id = extract_video_id(video_url)
+    if not video_id:
+        return jsonify({'success': False, 'error': 'Invalid YouTube URL'})
+    
+    try:
+        if service == 'loader':
+            # Try loader.to API
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Content-Type': 'application/x-www-form-urlencoded',
+            }
+            
+            payload = {
+                'url': video_url,
+                'format': 'mp3'
+            }
+            
+            response = requests.post(
+                'https://loader.to/ajax/download.php',
+                data=payload,
+                headers=headers,
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                if result.get('success'):
+                    return jsonify({
+                        'success': True,
+                        'download_url': result.get('download_url'),
+                        'title': result.get('title', f'video_{video_id}'),
+                        'service': 'loader.to'
+                    })
+        
+        elif service == 'ytmp3':
+            # Try ytmp3 API alternative
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            }
+            
+            # Use a different conversion service
+            response = requests.get(
+                f'https://api.vevio.com/convert',
+                params={'url': video_url, 'format': 'mp3'},
+                headers=headers,
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('url'):
+                    return jsonify({
+                        'success': True,
+                        'download_url': data.get('url'),
+                        'title': data.get('title', f'video_{video_id}'),
+                        'service': 'ytmp3'
+                    })
+        
+        # Fallback: Return direct download links for user to click
+        return jsonify({
+            'success': True,
+            'direct_links': [
+                {
+                    'name': 'YTMP3.cc',
+                    'url': f'https://ytmp3.cc/?url={video_url}',
+                    'type': 'external'
+                },
+                {
+                    'name': 'Loader.to',
+                    'url': f'https://loader.to/en87/download-youtube-mp3.html?video={video_url}',
+                    'type': 'external'
+                },
+                {
+                    'name': 'Y2Mate',
+                    'url': f'https://y2mate.com/youtube/{video_id}',
+                    'type': 'external'
+                }
+            ],
+            'message': 'Click any link below to download directly'
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False, 
+            'error': f'Conversion failed: {str(e)}'
+        })
+
 @app.route('/upload-mp3', methods=['POST'])
 def upload_mp3():
     """Handle MP3 files uploaded from client"""
@@ -158,6 +256,6 @@ def health():
     return jsonify({'status': 'healthy', 'timestamp': time.time()})
 
 if __name__ == "__main__":
-    print("🚀 YouTube MP3 Downloader with Embedded Services")
+    print("🚀 YouTube MP3 Downloader with Direct Conversion")
     print(f"📁 Download folder: {DOWNLOAD_FOLDER}")
     app.run(debug=False, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
