@@ -116,119 +116,25 @@ def get_basic_video_info(video_id):
         'source': 'fallback'
     }
 
-def try_y2mate_service(video_id, download_id):
-    """Try y2mate service for download"""
+def try_loader_service(video_id, download_id):
+    """Try loader.to service"""
     try:
-        print(f"🌐 Trying y2mate service for: {video_id}")
+        print(f"🌐 Trying loader.to service for: {video_id}")
         
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-            'Accept': 'application/json, text/javascript, */*; q=0.01',
-            'X-Requested-With': 'XMLHttpRequest',
-            'Origin': 'https://www.y2mate.com',
-            'Referer': 'https://www.y2mate.com/',
-            'Accept-Language': 'en-US,en;q=0.9',
+            'Content-Type': 'application/x-www-form-urlencoded',
         }
         
-        # Step 1: Analyze the video
-        analyze_data = {
-            'k_query': f'https://www.youtube.com/watch?v={video_id}',
-            'k_page': 'home',
-            'hl': 'en',
-            'q_auto': 0
-        }
-        
-        analyze_response = requests.post(
-            'https://www.y2mate.com/mates/analyzeV2/ajax',
-            data=analyze_data,
-            headers=headers,
-            timeout=30
-        )
-        
-        if analyze_response.status_code == 200:
-            analyze_data = analyze_response.json()
-            if analyze_data.get('status') == 'success':
-                video_title = analyze_data.get('title', f'video_{video_id}')
-                vid = analyze_data.get('vid')
-                
-                print(f"✅ y2mate analysis successful: {video_title}")
-                
-                # Step 2: Get download links
-                convert_data = {
-                    'vid': vid,
-                    'k': 'mp3'
-                }
-                
-                convert_response = requests.post(
-                    'https://www.y2mate.com/mates/convertV2/index',
-                    data=convert_data,
-                    headers=headers,
-                    timeout=30
-                )
-                
-                if convert_response.status_code == 200:
-                    convert_data = convert_response.json()
-                    if convert_data.get('status') == 'success':
-                        download_url = convert_data.get('dlink')
-                        if download_url:
-                            print(f"📥 Download URL obtained, starting download...")
-                            
-                            # Download the file
-                            filename = sanitize_filename(f"{video_title}.mp3")
-                            file_path = os.path.join(DOWNLOAD_FOLDER, filename)
-                            
-                            # Update progress
-                            downloads_progress[download_id]['progress'] = 50
-                            
-                            audio_response = requests.get(download_url, stream=True, timeout=120)
-                            if audio_response.status_code == 200:
-                                total_size = int(audio_response.headers.get('content-length', 0))
-                                downloaded_size = 0
-                                
-                                with open(file_path, 'wb') as f:
-                                    for chunk in audio_response.iter_content(chunk_size=8192):
-                                        if chunk:
-                                            f.write(chunk)
-                                            downloaded_size += len(chunk)
-                                            if total_size > 0:
-                                                progress = 50 + (downloaded_size / total_size) * 50
-                                                downloads_progress[download_id]['progress'] = progress
-                                
-                                downloads_progress[download_id]['file'] = file_path
-                                downloads_progress[download_id]['finished'] = True
-                                downloads_progress[download_id]['progress'] = 100
-                                print(f"✅ y2mate download successful: {filename}")
-                                return True
-                            else:
-                                print(f"❌ Failed to download from y2mate: {audio_response.status_code}")
-        else:
-            print(f"❌ y2mate analysis failed: {analyze_response.status_code}")
-            
-    except Exception as e:
-        print(f"❌ y2mate service failed: {e}")
-    
-    return False
-
-def try_onlinevideoconverter(video_id, download_id):
-    """Try onlinevideoconverter service"""
-    try:
-        print(f"🌐 Trying onlinevideoconverter for: {video_id}")
-        
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Content-Type': 'application/json',
-            'Accept': 'application/json, text/plain, */*',
-        }
-        
-        payload = {
+        # Get download link from loader.to
+        data = {
             'url': f'https://www.youtube.com/watch?v={video_id}',
             'format': 'mp3'
         }
         
         response = requests.post(
-            'https://api.onlinevideoconverter.pro/api/convert',
-            json=payload,
+            'https://loader.to/ajax/download.php',
+            data=data,
             headers=headers,
             timeout=60
         )
@@ -236,80 +142,228 @@ def try_onlinevideoconverter(video_id, download_id):
         if response.status_code == 200:
             data = response.json()
             if data.get('success'):
-                download_url = data.get('url')
+                download_url = data.get('download_url')
                 if download_url:
-                    print(f"📥 Onlinevideoconverter URL obtained")
+                    print(f"📥 Loader.to URL obtained: {download_url}")
                     
                     filename = sanitize_filename(f"video_{video_id}.mp3")
                     file_path = os.path.join(DOWNLOAD_FOLDER, filename)
                     
-                    downloads_progress[download_id]['progress'] = 70
+                    # Update progress
+                    downloads_progress[download_id]['progress'] = 50
+                    downloads_progress[download_id]['status'] = 'Downloading from loader.to...'
                     
+                    # Download the file
                     audio_response = requests.get(download_url, stream=True, timeout=120)
                     if audio_response.status_code == 200:
+                        total_size = int(audio_response.headers.get('content-length', 0))
+                        downloaded_size = 0
+                        
                         with open(file_path, 'wb') as f:
                             for chunk in audio_response.iter_content(chunk_size=8192):
                                 if chunk:
                                     f.write(chunk)
+                                    downloaded_size += len(chunk)
+                                    if total_size > 0:
+                                        progress = 50 + (downloaded_size / total_size) * 50
+                                        downloads_progress[download_id]['progress'] = progress
                         
                         downloads_progress[download_id]['file'] = file_path
                         downloads_progress[download_id]['finished'] = True
                         downloads_progress[download_id]['progress'] = 100
-                        print(f"✅ Onlinevideoconverter download successful")
+                        downloads_progress[download_id]['status'] = 'Download complete!'
+                        print(f"✅ Loader.to download successful: {filename}")
                         return True
-                        
+                    else:
+                        print(f"❌ Failed to download from loader.to: {audio_response.status_code}")
+            else:
+                print(f"❌ Loader.to API error: {data.get('error', 'Unknown error')}")
+        else:
+            print(f"❌ Loader.to request failed: {response.status_code}")
+            
     except Exception as e:
-        print(f"❌ Onlinevideoconverter failed: {e}")
+        print(f"❌ Loader.to service failed: {e}")
     
     return False
 
-def try_savemp3_service(video_id, download_id):
-    """Try savemp3 service as fallback"""
+def try_youtubetomp3_service(video_id, download_id):
+    """Try youtube-to-mp3 service"""
     try:
-        print(f"🌐 Trying savemp3 service for: {video_id}")
+        print(f"🌐 Trying youtube-to-mp3 service for: {video_id}")
         
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         }
         
-        # Use savemp3 API
-        response = requests.get(
-            f'https://api.savemp3.com/api/convert',
-            params={'url': f'https://www.youtube.com/watch?v={video_id}'},
+        # Use a simple conversion service
+        convert_url = f"https://ytmp3.cc/convert"
+        
+        data = {
+            'video': f'https://www.youtube.com/watch?v={video_id}',
+            'format': 'mp3'
+        }
+        
+        response = requests.post(
+            convert_url,
+            data=data,
             headers=headers,
-            timeout=30
+            timeout=60
         )
         
         if response.status_code == 200:
-            data = response.json()
-            if data.get('success'):
-                download_url = data.get('url')
-                if download_url:
-                    filename = sanitize_filename(f"video_{video_id}.mp3")
-                    file_path = os.path.join(DOWNLOAD_FOLDER, filename)
+            # Try to extract download link from response
+            import re
+            download_links = re.findall(r'https?://[^\s<>"]+\.mp3', response.text)
+            if download_links:
+                download_url = download_links[0]
+                print(f"📥 YouTube-to-MP3 URL obtained: {download_url}")
+                
+                filename = sanitize_filename(f"video_{video_id}.mp3")
+                file_path = os.path.join(DOWNLOAD_FOLDER, filename)
+                
+                downloads_progress[download_id]['progress'] = 70
+                downloads_progress[download_id]['status'] = 'Downloading from YouTube-to-MP3...'
+                
+                audio_response = requests.get(download_url, stream=True, timeout=120)
+                if audio_response.status_code == 200:
+                    with open(file_path, 'wb') as f:
+                        for chunk in audio_response.iter_content(chunk_size=8192):
+                            if chunk:
+                                f.write(chunk)
                     
-                    audio_response = requests.get(download_url, timeout=120)
-                    if audio_response.status_code == 200:
-                        with open(file_path, 'wb') as f:
-                            f.write(audio_response.content)
-                        
-                        downloads_progress[download_id]['file'] = file_path
-                        downloads_progress[download_id]['finished'] = True
-                        downloads_progress[download_id]['progress'] = 100
-                        print(f"✅ Savemp3 download successful")
-                        return True
-                        
+                    downloads_progress[download_id]['file'] = file_path
+                    downloads_progress[download_id]['finished'] = True
+                    downloads_progress[download_id]['progress'] = 100
+                    downloads_progress[download_id]['status'] = 'Download complete!'
+                    print(f"✅ YouTube-to-MP3 download successful")
+                    return True
+                    
     except Exception as e:
-        print(f"❌ Savemp3 service failed: {e}")
+        print(f"❌ YouTube-to-MP3 service failed: {e}")
     
     return False
 
+def try_simple_youtube_download(video_id, download_id):
+    """Try a very simple YouTube download approach with minimal settings"""
+    try:
+        print(f"🎯 Trying simple YouTube download for: {video_id}")
+        
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'outtmpl': os.path.join(DOWNLOAD_FOLDER, '%(title)s.%(ext)s'),
+            'quiet': True,
+            'no_warnings': True,
+            'ignoreerrors': True,
+            'no_check_certificate': True,
+            'progress_hooks': [create_progress_hook(download_id)],
+            'extract_flat': False,
+            'socket_timeout': 30,
+            'retries': 3,
+            'fragment_retries': 3,
+            'skip_unavailable_fragments': True,
+            'noplaylist': True,
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '192',
+            }],
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            }
+        }
+        
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            try:
+                url = f'https://www.youtube.com/watch?v={video_id}'
+                ydl.download([url])
+                
+                # Find the downloaded file
+                for f in os.listdir(DOWNLOAD_FOLDER):
+                    if f.endswith('.mp3') and video_id in f:
+                        file_path = os.path.join(DOWNLOAD_FOLDER, f)
+                        downloads_progress[download_id]['file'] = file_path
+                        downloads_progress[download_id]['finished'] = True
+                        downloads_progress[download_id]['progress'] = 100
+                        downloads_progress[download_id]['status'] = 'Download complete!'
+                        print(f"✅ Simple YouTube download successful: {f}")
+                        return True
+                        
+            except Exception as e:
+                print(f"❌ Simple YouTube download failed: {e}")
+                return False
+        
+        return False
+        
+    except Exception as e:
+        print(f"❌ Simple YouTube download method failed: {e}")
+        return False
+
+def try_local_conversion(video_id, download_id):
+    """Try to download using local conversion as last resort"""
+    try:
+        print(f"🔄 Trying local conversion for: {video_id}")
+        
+        # This is a very basic approach that might work for some videos
+        ydl_opts = {
+            'format': 'worstaudio/worst',  # Try worst quality first (less likely to be blocked)
+            'outtmpl': os.path.join(DOWNLOAD_FOLDER, f'{video_id}.%(ext)s'),
+            'quiet': True,
+            'no_warnings': True,
+            'ignoreerrors': True,
+            'extract_flat': False,
+            'noplaylist': True,
+        }
+        
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            try:
+                url = f'https://www.youtube.com/watch?v={video_id}'
+                info = ydl.extract_info(url, download=True)
+                
+                # Find any downloaded audio file
+                for f in os.listdir(DOWNLOAD_FOLDER):
+                    if video_id in f and f.endswith(('.m4a', '.webm', '.opus')):
+                        original_file = os.path.join(DOWNLOAD_FOLDER, f)
+                        mp3_file = os.path.join(DOWNLOAD_FOLDER, f'{video_id}.mp3')
+                        
+                        # Convert to MP3
+                        ffmpeg_path = detect_ffmpeg_path()
+                        result = subprocess.run([
+                            ffmpeg_path, '-y', '-i', original_file, 
+                            '-vn', '-acodec', 'libmp3lame', 
+                            '-ab', '192k', '-ar', '44100', 
+                            mp3_file
+                        ], capture_output=True, text=True)
+                        
+                        if result.returncode == 0 and os.path.exists(mp3_file):
+                            # Remove original file
+                            if os.path.exists(original_file):
+                                os.remove(original_file)
+                            
+                            downloads_progress[download_id]['file'] = mp3_file
+                            downloads_progress[download_id]['finished'] = True
+                            downloads_progress[download_id]['progress'] = 100
+                            downloads_progress[download_id]['status'] = 'Download complete!'
+                            print(f"✅ Local conversion successful: {mp3_file}")
+                            return True
+                            
+            except Exception as e:
+                print(f"❌ Local conversion failed: {e}")
+                return False
+        
+        return False
+        
+    except Exception as e:
+        print(f"❌ Local conversion method failed: {e}")
+        return False
+
 def download_with_external_services(video_id, download_id):
-    """Use external services to download the video"""
+    """Use multiple strategies to download the video"""
     services = [
-        ("y2mate", try_y2mate_service),
-        ("onlinevideoconverter", try_onlinevideoconverter),
-        ("savemp3", try_savemp3_service),
+        ("loader.to", try_loader_service),
+        ("youtube-to-mp3", try_youtubetomp3_service),
+        ("simple YouTube", try_simple_youtube_download),
+        ("local conversion", try_local_conversion),
     ]
     
     for service_name, service_func in services:
@@ -322,12 +376,13 @@ def download_with_external_services(video_id, download_id):
             return True
         else:
             print(f"❌ {service_name} failed")
+            # Reset progress for next service
             downloads_progress[download_id]['progress'] = 0
     
     return False
 
 def download_to_mp3(url, download_id):
-    """Main download function using external services"""
+    """Main download function using multiple strategies"""
     try:
         video_id = extract_video_id(url)
         if not video_id:
@@ -341,18 +396,20 @@ def download_to_mp3(url, download_id):
                 downloads_progress[download_id]['file'] = os.path.join(DOWNLOAD_FOLDER, f)
                 downloads_progress[download_id]['finished'] = True
                 downloads_progress[download_id]['progress'] = 100
+                downloads_progress[download_id]['status'] = 'File already exists'
                 print(f"✅ File already exists: {f}")
                 return
         
-        # Try external services
+        # Try multiple download strategies
         if download_with_external_services(video_id, download_id):
             return
         else:
-            raise Exception("All external services failed. YouTube may be blocking all download services from this server.")
+            raise Exception("All download methods failed. This might be due to YouTube restrictions or the video being unavailable.")
         
     except Exception as e:
         downloads_progress[download_id]['error'] = str(e)
         downloads_progress[download_id]['finished'] = True
+        downloads_progress[download_id]['status'] = 'Download failed'
         print(f"💥 Download failed: {e}")
 
 # ----------------------------
@@ -380,7 +437,7 @@ def info():
         
         video_info = get_basic_video_info(video_id)
         video_info['limited_info'] = True
-        video_info['warning'] = 'Using external download services (may be slower)'
+        video_info['warning'] = 'Using multiple download strategies (may take a moment)'
         
         return jsonify({'success': True, **video_info})
         
@@ -495,8 +552,8 @@ if __name__ == "__main__":
                 pass
     
     print("🚀 YouTube MP3 Downloader started")
-    print("🌐 Using external download services")
-    print("💡 Note: Downloads use third-party services since YouTube blocks direct downloads")
+    print("🔄 Using multiple download strategies")
+    print("💡 Note: Trying loader.to, YouTube-to-MP3, and direct download methods")
     print(f"🔊 Download folder: {DOWNLOAD_FOLDER}")
     
     app.run(debug=False, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
