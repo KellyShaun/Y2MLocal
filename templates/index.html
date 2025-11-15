@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>YouTube MP3 Manager</title>
+    <title>YouTube MP3 Downloader</title>
     <style>
         * {
             margin: 0;
@@ -20,7 +20,7 @@
         }
 
         .container {
-            max-width: 800px;
+            max-width: 1200px;
             margin: 0 auto;
             background: white;
             border-radius: 15px;
@@ -40,27 +40,24 @@
             margin-bottom: 10px;
         }
 
-        .header p {
-            font-size: 1.1em;
-            opacity: 0.9;
-        }
-
         .content {
             padding: 30px;
         }
 
         .section {
             margin-bottom: 30px;
-            padding: 20px;
+            padding: 25px;
             background: #f8f9fa;
-            border-radius: 10px;
+            border-radius: 12px;
+            border-left: 4px solid #667eea;
         }
 
         .section h2 {
             color: #333;
-            margin-bottom: 15px;
-            border-bottom: 2px solid #667eea;
-            padding-bottom: 10px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
 
         .btn {
@@ -71,12 +68,13 @@
             border-radius: 8px;
             font-size: 16px;
             cursor: pointer;
-            transition: transform 0.2s;
+            transition: all 0.3s;
             margin: 5px;
         }
 
         .btn:hover {
             transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
         }
 
         .btn-success {
@@ -91,24 +89,112 @@
             background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
         }
 
-        .service-list {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-            margin: 20px 0;
-        }
-
-        .service-item {
-            background: white;
+        .url-input {
+            width: 100%;
             padding: 15px;
+            border: 2px solid #e0e0e0;
             border-radius: 8px;
-            text-align: center;
-            border: 2px solid #e9ecef;
+            font-size: 16px;
+            margin-bottom: 15px;
             transition: border-color 0.3s;
         }
 
-        .service-item:hover {
+        .url-input:focus {
+            outline: none;
             border-color: #667eea;
+        }
+
+        .video-info-card {
+            display: none;
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+
+        .video-thumbnail {
+            width: 100%;
+            max-width: 300px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+
+        .services-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+
+        .service-card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            transition: transform 0.3s;
+        }
+
+        .service-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .service-card h3 {
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        .iframe-container {
+            display: none;
+            margin-top: 20px;
+            border: 2px solid #667eea;
+            border-radius: 10px;
+            overflow: hidden;
+            background: white;
+        }
+
+        .service-iframe {
+            width: 100%;
+            height: 600px;
+            border: none;
+        }
+
+        .progress-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .progress-content {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            text-align: center;
+            max-width: 500px;
+            width: 90%;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
 
         .upload-area {
@@ -118,6 +204,7 @@
             text-align: center;
             margin: 20px 0;
             background: #f8f9ff;
+            transition: all 0.3s;
         }
 
         .upload-area.dragover {
@@ -134,6 +221,11 @@
             border-radius: 10px;
             margin-bottom: 10px;
             background: white;
+            transition: transform 0.2s;
+        }
+
+        .download-item:hover {
+            transform: translateX(5px);
         }
 
         .download-info {
@@ -170,86 +262,140 @@
             border: 1px solid #b3d7ff;
         }
 
-        input[type="file"] {
-            margin: 15px 0;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            width: 100%;
+        .step-indicator {
+            display: flex;
+            justify-content: space-between;
+            margin: 20px 0;
+            position: relative;
         }
 
-        input[type="text"] {
-            width: 100%;
-            padding: 12px;
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
-            font-size: 16px;
-            margin-bottom: 15px;
+        .step {
+            flex: 1;
+            text-align: center;
+            padding: 10px;
+            background: #e9ecef;
+            border-radius: 20px;
+            margin: 0 5px;
+            font-weight: bold;
+            position: relative;
+            z-index: 2;
+        }
+
+        .step.active {
+            background: #667eea;
+            color: white;
+        }
+
+        .step.completed {
+            background: #28a745;
+            color: white;
+        }
+
+        .step-line {
+            position: absolute;
+            top: 50%;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: #e9ecef;
+            z-index: 1;
         }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>🎵 YouTube MP3 Manager</h1>
-            <p>Download from external services and manage your files here</p>
+            <h1>🎵 YouTube MP3 Downloader</h1>
+            <p>Convert YouTube videos to MP3 directly in your browser</p>
         </div>
 
         <div class="content">
             <!-- Status Messages -->
             <div id="statusMessage"></div>
 
-            <!-- Download Services Section -->
+            <!-- Step 1: URL Input -->
             <div class="section">
-                <h2>📥 Download from External Services</h2>
-                <p>Click any service below to download YouTube videos as MP3. These open in new tabs and use your browser.</p>
+                <h2>📝 Step 1: Enter YouTube URL</h2>
+                <input type="url" class="url-input" id="urlInput" 
+                       placeholder="Paste YouTube URL here (e.g., https://www.youtube.com/watch?v=...)" 
+                       required>
+                <button class="btn btn-success" onclick="getVideoInfo()">Get Video Info</button>
+            </div>
+
+            <!-- Video Info Card -->
+            <div class="video-info-card" id="videoInfoCard">
+                <img class="video-thumbnail" id="videoThumbnail" src="" alt="Video thumbnail">
+                <h3 id="videoTitle"></h3>
+                <p><strong>Uploader:</strong> <span id="videoUploader"></span></p>
+                <p><strong>Status:</strong> <span id="videoStatus">Ready to download</span></p>
+            </div>
+
+            <!-- Step 2: Download Services -->
+            <div class="section" id="downloadSection" style="display: none;">
+                <h2>📥 Step 2: Choose Download Service</h2>
+                <p>Select a service below to download your video. The service will open in an embedded window.</p>
                 
-                <div class="service-list">
-                    <div class="service-item">
-                        <h3>YTMP3.cc</h3>
-                        <button class="btn" onclick="openService('https://ytmp3.cc')">Open Service</button>
+                <div class="step-indicator">
+                    <div class="step-line"></div>
+                    <div class="step active">1. Enter URL</div>
+                    <div class="step">2. Download</div>
+                    <div class="step">3. Upload</div>
+                    <div class="step">4. Complete</div>
+                </div>
+
+                <div class="services-grid">
+                    <div class="service-card">
+                        <h3>🎵 YTMP3 Converter</h3>
+                        <p>Fast and reliable conversion</p>
+                        <button class="btn" onclick="openService('ytmp3')">Use This Service</button>
                     </div>
-                    <div class="service-item">
-                        <h3>Loader.to</h3>
-                        <button class="btn" onclick="openService('https://loader.to')">Open Service</button>
+                    <div class="service-card">
+                        <h3>⚡ Loader.to</h3>
+                        <p>High quality downloads</p>
+                        <button class="btn" onclick="openService('loader')">Use This Service</button>
                     </div>
-                    <div class="service-item">
-                        <h3>Y2Mate</h3>
-                        <button class="btn" onclick="openService('https://y2mate.com')">Open Service</button>
-                    </div>
-                    <div class="service-item">
-                        <h3>OnlineConverter</h3>
-                        <button class="btn" onclick="openService('https://onlinevideoconverter.pro')">Open Service</button>
+                    <div class="service-card">
+                        <h3>🔗 Y2Mate</h3>
+                        <p>Multiple format options</p>
+                        <button class="btn" onclick="openService('y2mate')">Use This Service</button>
                     </div>
                 </div>
 
-                <div style="margin-top: 20px;">
-                    <p><strong>Quick Download:</strong> Enter YouTube URL to open services directly</p>
-                    <input type="text" id="youtubeUrl" placeholder="https://www.youtube.com/watch?v=...">
-                    <button class="btn btn-success" onclick="openAllServices()">Open All Services</button>
+                <!-- Embedded Service Container -->
+                <div class="iframe-container" id="serviceFrameContainer">
+                    <div style="padding: 15px; background: #667eea; color: white; display: flex; justify-content: space-between; align-items: center;">
+                        <span id="frameTitle">Download Service</span>
+                        <button class="btn btn-secondary" onclick="closeServiceFrame()">Close</button>
+                    </div>
+                    <iframe class="service-iframe" id="serviceFrame" sandbox="allow-scripts allow-same-origin allow-forms allow-popups"></iframe>
                 </div>
             </div>
 
-            <!-- File Upload Section -->
-            <div class="section">
-                <h2>📤 Upload Your MP3 Files</h2>
-                <p>After downloading from external services, upload the MP3 files here to manage them.</p>
+            <!-- Step 3: File Upload -->
+            <div class="section" id="uploadSection" style="display: none;">
+                <h2>📤 Step 3: Upload Your MP3</h2>
+                <p>After downloading from the service, upload the MP3 file here to save it to your account.</p>
                 
+                <div class="step-indicator">
+                    <div class="step-line"></div>
+                    <div class="step completed">1. Enter URL</div>
+                    <div class="step completed">2. Download</div>
+                    <div class="step active">3. Upload</div>
+                    <div class="step">4. Complete</div>
+                </div>
+
                 <div class="upload-area" id="uploadArea">
-                    <h3>Drop MP3 files here or click to browse</h3>
-                    <p>Supported: .mp3 files only</p>
-                    <input type="file" id="fileInput" accept=".mp3" multiple style="display: none;">
-                    <button class="btn" onclick="document.getElementById('fileInput').click()">Select Files</button>
-                    <div id="fileList" style="margin-top: 15px;"></div>
+                    <h3>📁 Drop your downloaded MP3 file here</h3>
+                    <p>Or click to browse your files</p>
+                    <input type="file" id="fileInput" accept=".mp3" style="display: none;">
+                    <button class="btn" onclick="document.getElementById('fileInput').click()">Select MP3 File</button>
+                    <div id="fileInfo" style="margin-top: 15px;"></div>
                 </div>
 
-                <div style="margin-top: 15px;">
-                    <input type="text" id="videoTitle" placeholder="Video title (optional)">
-                    <button class="btn btn-success" onclick="uploadFiles()">Upload Selected Files</button>
-                </div>
+                <button class="btn btn-success" onclick="uploadFile()" style="margin-top: 15px;">Upload to My Account</button>
             </div>
 
-            <!-- Downloads List -->
+            <!-- Downloads Management -->
             <div class="section">
                 <h2>📁 Your Downloaded Files</h2>
                 <button class="btn" onclick="loadDownloads()">Refresh List</button>
@@ -260,8 +406,19 @@
         </div>
     </div>
 
+    <!-- Progress Overlay -->
+    <div class="progress-overlay" id="progressOverlay">
+        <div class="progress-content">
+            <div class="spinner"></div>
+            <h3 id="progressTitle">Processing...</h3>
+            <p id="progressMessage">Please wait while we process your request</p>
+        </div>
+    </div>
+
     <script>
-        let selectedFiles = [];
+        let currentVideoId = '';
+        let currentVideoTitle = '';
+        let currentVideoUrl = '';
 
         function showStatus(message, type = 'info') {
             const statusDiv = document.getElementById('statusMessage');
@@ -274,48 +431,127 @@
             }
         }
 
-        function openService(url) {
-            window.open(url, '_blank');
-            showStatus('Opened service in new tab', 'info');
+        function showProgress(title, message) {
+            document.getElementById('progressTitle').textContent = title;
+            document.getElementById('progressMessage').textContent = message;
+            document.getElementById('progressOverlay').style.display = 'flex';
         }
 
-        function openAllServices() {
-            const urlInput = document.getElementById('youtubeUrl').value.trim();
-            if (!urlInput) {
-                showStatus('Please enter a YouTube URL first', 'error');
+        function hideProgress() {
+            document.getElementById('progressOverlay').style.display = 'none';
+        }
+
+        async function getVideoInfo() {
+            const url = document.getElementById('urlInput').value.trim();
+            if (!url) {
+                showStatus('Please enter a YouTube URL', 'error');
                 return;
             }
 
-            // Extract video ID if full URL is provided
-            let videoId = urlInput;
-            if (urlInput.includes('youtube.com') || urlInput.includes('youtu.be')) {
-                const match = urlInput.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&]+)/);
-                if (match) videoId = match[1];
+            if (!url.includes('youtube.com') && !url.includes('youtu.be')) {
+                showStatus('Please enter a valid YouTube URL', 'error');
+                return;
             }
 
-            const services = [
-                `https://ytmp3.cc/?url=https://www.youtube.com/watch?v=${videoId}`,
-                `https://loader.to/en87/download-youtube-mp3.html?video=https://www.youtube.com/watch?v=${videoId}`,
-                `https://y2mate.com/youtube/${videoId}`,
-                `https://onlinevideoconverter.pro/convert?url=https://www.youtube.com/watch?v=${videoId}`
-            ];
+            currentVideoUrl = url;
+            showProgress('Getting Video Info', 'Fetching video information from YouTube...');
 
-            services.forEach(service => {
-                window.open(service, '_blank');
-            });
+            try {
+                const response = await fetch('/video-info', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ url: url })
+                });
 
-            showStatus('Opened all services in new tabs. Download from any of them.', 'success');
+                const data = await response.json();
+
+                if (data.success) {
+                    currentVideoId = data.video_id;
+                    currentVideoTitle = data.title;
+                    
+                    // Update video info card
+                    document.getElementById('videoThumbnail').src = data.thumbnail;
+                    document.getElementById('videoTitle').textContent = data.title;
+                    document.getElementById('videoUploader').textContent = data.uploader;
+                    document.getElementById('videoInfoCard').style.display = 'block';
+                    
+                    // Show download section
+                    document.getElementById('downloadSection').style.display = 'block';
+                    
+                    hideProgress();
+                    showStatus('Video info loaded successfully! Choose a download service below.', 'success');
+                } else {
+                    hideProgress();
+                    showStatus(data.error, 'error');
+                }
+            } catch (error) {
+                hideProgress();
+                showStatus('Failed to fetch video info: ' + error.message, 'error');
+            }
         }
 
-        // File handling
+        function openService(serviceType) {
+            if (!currentVideoId) {
+                showStatus('Please get video info first', 'error');
+                return;
+            }
+
+            const frameContainer = document.getElementById('serviceFrameContainer');
+            const frame = document.getElementById('serviceFrame');
+            const frameTitle = document.getElementById('frameTitle');
+
+            let serviceUrl = '';
+            let title = '';
+
+            switch(serviceType) {
+                case 'ytmp3':
+                    serviceUrl = `https://ytmp3.cc/?url=https://www.youtube.com/watch?v=${currentVideoId}`;
+                    title = 'YTMP3 Converter';
+                    break;
+                case 'loader':
+                    serviceUrl = `https://loader.to/en87/download-youtube-mp3.html?video=https://www.youtube.com/watch?v=${currentVideoId}`;
+                    title = 'Loader.to';
+                    break;
+                case 'y2mate':
+                    serviceUrl = `https://y2mate.com/youtube/${currentVideoId}`;
+                    title = 'Y2Mate';
+                    break;
+            }
+
+            frameTitle.textContent = title;
+            frame.src = serviceUrl;
+            frameContainer.style.display = 'block';
+
+            // Show upload section when service is opened
+            document.getElementById('uploadSection').style.display = 'block';
+
+            showStatus(`Opened ${title}. Download your MP3 file, then upload it in the next step.`, 'info');
+        }
+
+        function closeServiceFrame() {
+            document.getElementById('serviceFrameContainer').style.display = 'none';
+            document.getElementById('serviceFrame').src = '';
+        }
+
+        // File upload handling
         document.getElementById('fileInput').addEventListener('change', function(e) {
-            selectedFiles = Array.from(e.target.files);
-            updateFileList();
+            const file = e.target.files[0];
+            if (file) {
+                const fileInfo = document.getElementById('fileInfo');
+                fileInfo.innerHTML = `
+                    <div class="status info">
+                        <strong>Selected File:</strong> ${file.name}<br>
+                        <strong>Size:</strong> ${(file.size / 1024 / 1024).toFixed(2)} MB<br>
+                        <strong>Type:</strong> ${file.type || 'audio/mpeg'}
+                    </div>
+                `;
+            }
         });
 
-        // Drag and drop support
+        // Drag and drop for upload area
         const uploadArea = document.getElementById('uploadArea');
-        
         uploadArea.addEventListener('dragover', function(e) {
             e.preventDefault();
             uploadArea.classList.add('dragover');
@@ -329,85 +565,65 @@
         uploadArea.addEventListener('drop', function(e) {
             e.preventDefault();
             uploadArea.classList.remove('dragover');
-            selectedFiles = Array.from(e.dataTransfer.files).filter(file => 
-                file.name.endsWith('.mp3') || file.type === 'audio/mpeg'
-            );
-            updateFileList();
+            const file = e.dataTransfer.files[0];
+            if (file && (file.name.endsWith('.mp3') || file.type === 'audio/mpeg')) {
+                document.getElementById('fileInput').files = e.dataTransfer.files;
+                const event = new Event('change');
+                document.getElementById('fileInput').dispatchEvent(event);
+            } else {
+                showStatus('Please drop an MP3 file only', 'error');
+            }
         });
 
-        function updateFileList() {
-            const fileList = document.getElementById('fileList');
-            if (selectedFiles.length === 0) {
-                fileList.innerHTML = '<p>No files selected</p>';
+        async function uploadFile() {
+            const fileInput = document.getElementById('fileInput');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                showStatus('Please select an MP3 file first', 'error');
                 return;
             }
 
-            fileList.innerHTML = selectedFiles.map(file => 
-                `<div style="margin: 5px 0; padding: 5px; background: white; border-radius: 5px;">
-                    📄 ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)
-                </div>`
-            ).join('');
-        }
+            showProgress('Uploading File', 'Saving your MP3 file to your account...');
 
-        async function uploadFiles() {
-            if (selectedFiles.length === 0) {
-                showStatus('Please select files to upload', 'error');
-                return;
-            }
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('video_id', currentVideoId);
+            formData.append('video_title', currentVideoTitle);
 
-            const videoTitle = document.getElementById('videoTitle').value.trim() || 'video';
+            try {
+                const response = await fetch('/upload-mp3', {
+                    method: 'POST',
+                    body: formData
+                });
 
-            for (const file of selectedFiles) {
-                if (!file.name.endsWith('.mp3') && file.type !== 'audio/mpeg') {
-                    showStatus(`Skipping ${file.name}: Not an MP3 file`, 'error');
-                    continue;
+                const data = await response.json();
+
+                if (data.success) {
+                    hideProgress();
+                    showStatus('🎉 File uploaded successfully! You can now play or download it from your files list.', 'success');
+                    fileInput.value = '';
+                    document.getElementById('fileInfo').innerHTML = '';
+                    loadDownloads();
+                } else {
+                    hideProgress();
+                    showStatus('Upload failed: ' + data.error, 'error');
                 }
-
-                const formData = new FormData();
-                formData.append('file', file);
-                formData.append('video_id', 'user_uploaded');
-                formData.append('video_title', videoTitle);
-
-                showStatus(`Uploading ${file.name}...`, 'info');
-
-                try {
-                    const response = await fetch('/upload-mp3', {
-                        method: 'POST',
-                        body: formData
-                    });
-
-                    const data = await response.json();
-
-                    if (data.success) {
-                        showStatus(`Uploaded: ${file.name}`, 'success');
-                    } else {
-                        showStatus(`Failed to upload ${file.name}: ${data.error}`, 'error');
-                    }
-                } catch (error) {
-                    showStatus(`Network error uploading ${file.name}: ${error.message}`, 'error');
-                }
+            } catch (error) {
+                hideProgress();
+                showStatus('Upload failed: ' + error.message, 'error');
             }
-
-            // Reset after upload
-            selectedFiles = [];
-            document.getElementById('fileInput').value = '';
-            document.getElementById('videoTitle').value = '';
-            updateFileList();
-            loadDownloads(); // Refresh the downloads list
         }
 
         async function loadDownloads() {
             try {
                 const response = await fetch('/downloads-list');
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
                 const data = await response.json();
 
                 const downloadsList = document.getElementById('downloadsList');
                 
                 if (!data.success || !data.downloads || data.downloads.length === 0) {
-                    downloadsList.innerHTML = '<div class="status info">No files yet. Upload some MP3 files!</div>';
+                    downloadsList.innerHTML = '<div class="status info">No files yet. Download and upload some MP3 files!</div>';
                     return;
                 }
 
@@ -418,14 +634,13 @@
                             <small>${download.size_formatted} • ${download.modified_formatted}</small>
                         </div>
                         <div class="download-actions">
-                            <button class="btn btn-secondary" onclick="playAudio('${download.filename}')">Play</button>
-                            <button class="btn" onclick="downloadFile('${download.filename}')">Download</button>
-                            <button class="btn btn-danger" onclick="deleteFile('${download.filename}')">Delete</button>
+                            <button class="btn btn-secondary" onclick="playAudio('${download.filename}')">▶ Play</button>
+                            <button class="btn" onclick="downloadFile('${download.filename}')">📥 Download</button>
+                            <button class="btn btn-danger" onclick="deleteFile('${download.filename}')">🗑 Delete</button>
                         </div>
                     </div>
                 `).join('');
             } catch (error) {
-                console.error('Error loading downloads:', error);
                 showStatus('Failed to load downloads: ' + error.message, 'error');
             }
         }
@@ -448,10 +663,6 @@
                     method: 'DELETE'
                 });
 
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-
                 const data = await response.json();
 
                 if (data.success) {
@@ -468,7 +679,14 @@
         // Load downloads when page loads
         document.addEventListener('DOMContentLoaded', function() {
             loadDownloads();
-            showStatus('Ready to download and manage MP3 files!', 'info');
+            showStatus('Welcome! Enter a YouTube URL to get started.', 'info');
+        });
+
+        // Allow Enter key in URL input
+        document.getElementById('urlInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                getVideoInfo();
+            }
         });
     </script>
 </body>
