@@ -1,5 +1,7 @@
 import os
 import time
+import requests
+import re
 from flask import Flask, request, send_file, jsonify, render_template
 from flask_cors import CORS
 
@@ -19,9 +21,65 @@ def sanitize_filename(filename):
         filename = name[:100 - len(ext)] + ext
     return filename
 
+def extract_video_id(url):
+    """Extract video ID from YouTube URL"""
+    patterns = [
+        r'(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/)([^&?/]+)',
+        r'youtube\.com/watch\?.*v=([^&]+)',
+        r'youtu\.be/([^?]+)'
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, url)
+        if match:
+            return match.group(1)
+    return None
+
+def get_video_info(video_id):
+    """Get basic video info from YouTube"""
+    try:
+        # Try oEmbed first
+        oembed_url = f"https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={video_id}&format=json"
+        response = requests.get(oembed_url, timeout=10)
+        
+        if response.status_code == 200:
+            data = response.json()
+            return {
+                'title': data.get('title', 'Unknown Title'),
+                'uploader': data.get('author_name', 'Unknown'),
+                'thumbnail': f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg",
+                'success': True
+            }
+    except:
+        pass
+    
+    return {
+        'title': f'Video {video_id}',
+        'uploader': 'Unknown',
+        'thumbnail': f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg",
+        'success': True
+    }
+
 @app.route('/')
 def home():
     return render_template("index.html")
+
+@app.route('/video-info', methods=['POST'])
+def video_info():
+    """Get video information"""
+    data = request.json
+    url = data.get('url', '')
+    
+    if not url:
+        return jsonify({'success': False, 'error': 'No URL provided'})
+    
+    video_id = extract_video_id(url)
+    if not video_id:
+        return jsonify({'success': False, 'error': 'Invalid YouTube URL'})
+    
+    info = get_video_info(video_id)
+    info['video_id'] = video_id
+    
+    return jsonify(info)
 
 @app.route('/upload-mp3', methods=['POST'])
 def upload_mp3():
@@ -38,7 +96,6 @@ def upload_mp3():
             return jsonify({'success': False, 'error': 'No file selected'})
         
         if file and (file.filename.endswith('.mp3') or file.content_type == 'audio/mpeg'):
-            # Create a safe filename
             safe_title = sanitize_filename(video_title)
             filename = f"{safe_title}_{video_id}.mp3"
             file_path = os.path.join(DOWNLOAD_FOLDER, filename)
@@ -93,7 +150,6 @@ def downloads_list():
                 'size_formatted': f"{size/1024/1024:.2f} MB",
                 'modified_formatted': time.strftime('%Y-%m-%d %H:%M', time.localtime(modified)),
             })
-    # Sort by modification time (newest first)
     files.sort(key=lambda x: x['modified'], reverse=True)
     return jsonify({'success': True, 'downloads': files})
 
@@ -102,7 +158,6 @@ def health():
     return jsonify({'status': 'healthy', 'timestamp': time.time()})
 
 if __name__ == "__main__":
-    print("🚀 YouTube MP3 Manager started")
-    print("💡 Users download externally and upload files here")
+    print("🚀 YouTube MP3 Downloader with Embedded Services")
     print(f"📁 Download folder: {DOWNLOAD_FOLDER}")
     app.run(debug=False, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
