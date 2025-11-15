@@ -20,7 +20,7 @@
         }
 
         .container {
-            max-width: 1200px;
+            max-width: 800px;
             margin: 0 auto;
             background: white;
             border-radius: 15px;
@@ -70,6 +70,8 @@
             cursor: pointer;
             transition: all 0.3s;
             margin: 5px;
+            text-decoration: none;
+            display: inline-block;
         }
 
         .btn:hover {
@@ -87,6 +89,10 @@
 
         .btn-secondary {
             background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
+        }
+
+        .btn-external {
+            background: linear-gradient(135deg, #17a2b8 0%, #138496 100%);
         }
 
         .url-input {
@@ -111,6 +117,7 @@
             padding: 20px;
             margin: 20px 0;
             box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            text-align: center;
         }
 
         .video-thumbnail {
@@ -122,8 +129,8 @@
 
         .services-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 20px;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
             margin: 20px 0;
         }
 
@@ -134,10 +141,12 @@
             text-align: center;
             box-shadow: 0 5px 15px rgba(0,0,0,0.1);
             transition: transform 0.3s;
+            border: 2px solid #e9ecef;
         }
 
         .service-card:hover {
             transform: translateY(-5px);
+            border-color: #667eea;
         }
 
         .service-card h3 {
@@ -145,19 +154,24 @@
             color: #333;
         }
 
-        .iframe-container {
+        .download-links {
             display: none;
-            margin-top: 20px;
-            border: 2px solid #667eea;
-            border-radius: 10px;
-            overflow: hidden;
             background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
         }
 
-        .service-iframe {
-            width: 100%;
-            height: 600px;
-            border: none;
+        .download-link-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            background: #f8f9ff;
         }
 
         .progress-overlay {
@@ -205,6 +219,7 @@
             margin: 20px 0;
             background: #f8f9ff;
             transition: all 0.3s;
+            display: none;
         }
 
         .upload-area.dragover {
@@ -279,6 +294,7 @@
             font-weight: bold;
             position: relative;
             z-index: 2;
+            font-size: 14px;
         }
 
         .step.active {
@@ -300,13 +316,23 @@
             background: #e9ecef;
             z-index: 1;
         }
+
+        .conversion-result {
+            display: none;
+            background: #e8f5e8;
+            border: 2px solid #28a745;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            text-align: center;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
             <h1>🎵 YouTube MP3 Downloader</h1>
-            <p>Convert YouTube videos to MP3 directly in your browser</p>
+            <p>Convert YouTube videos to MP3 with one click</p>
         </div>
 
         <div class="content">
@@ -327,72 +353,55 @@
                 <img class="video-thumbnail" id="videoThumbnail" src="" alt="Video thumbnail">
                 <h3 id="videoTitle"></h3>
                 <p><strong>Uploader:</strong> <span id="videoUploader"></span></p>
-                <p><strong>Status:</strong> <span id="videoStatus">Ready to download</span></p>
             </div>
 
             <!-- Step 2: Download Services -->
             <div class="section" id="downloadSection" style="display: none;">
-                <h2>📥 Step 2: Choose Download Service</h2>
-                <p>Select a service below to download your video. The service will open in an embedded window.</p>
+                <h2>📥 Step 2: Convert to MP3</h2>
+                <p>Choose a service to convert your video. We'll handle the conversion and provide download links.</p>
                 
                 <div class="step-indicator">
                     <div class="step-line"></div>
-                    <div class="step active">1. Enter URL</div>
-                    <div class="step">2. Download</div>
-                    <div class="step">3. Upload</div>
+                    <div class="step completed">1. Enter URL</div>
+                    <div class="step active">2. Convert</div>
+                    <div class="step">3. Download</div>
                     <div class="step">4. Complete</div>
                 </div>
 
                 <div class="services-grid">
                     <div class="service-card">
-                        <h3>🎵 YTMP3 Converter</h3>
-                        <p>Fast and reliable conversion</p>
-                        <button class="btn" onclick="openService('ytmp3')">Use This Service</button>
+                        <h3>⚡ Fast Conversion</h3>
+                        <p>Quick MP3 conversion</p>
+                        <button class="btn" onclick="convertVideo('loader')">Convert Now</button>
                     </div>
                     <div class="service-card">
-                        <h3>⚡ Loader.to</h3>
-                        <p>High quality downloads</p>
-                        <button class="btn" onclick="openService('loader')">Use This Service</button>
-                    </div>
-                    <div class="service-card">
-                        <h3>🔗 Y2Mate</h3>
-                        <p>Multiple format options</p>
-                        <button class="btn" onclick="openService('y2mate')">Use This Service</button>
+                        <h3>🎵 High Quality</h3>
+                        <p>Best audio quality</p>
+                        <button class="btn" onclick="convertVideo('ytmp3')">Convert Now</button>
                     </div>
                 </div>
 
-                <!-- Embedded Service Container -->
-                <div class="iframe-container" id="serviceFrameContainer">
-                    <div style="padding: 15px; background: #667eea; color: white; display: flex; justify-content: space-between; align-items: center;">
-                        <span id="frameTitle">Download Service</span>
-                        <button class="btn btn-secondary" onclick="closeServiceFrame()">Close</button>
-                    </div>
-                    <iframe class="service-iframe" id="serviceFrame" sandbox="allow-scripts allow-same-origin allow-forms allow-popups"></iframe>
+                <!-- Direct Download Links -->
+                <div class="download-links" id="downloadLinks">
+                    <h3>📥 Download Your MP3</h3>
+                    <div id="directLinksList"></div>
+                    <div id="apiResult"></div>
                 </div>
             </div>
 
             <!-- Step 3: File Upload -->
-            <div class="section" id="uploadSection" style="display: none;">
-                <h2>📤 Step 3: Upload Your MP3</h2>
-                <p>After downloading from the service, upload the MP3 file here to save it to your account.</p>
-                
-                <div class="step-indicator">
-                    <div class="step-line"></div>
-                    <div class="step completed">1. Enter URL</div>
-                    <div class="step completed">2. Download</div>
-                    <div class="step active">3. Upload</div>
-                    <div class="step">4. Complete</div>
-                </div>
+            <div class="section">
+                <h2>📤 Step 3: Manage Your Files</h2>
+                <p>Upload MP3 files you've downloaded or manage existing files.</p>
 
                 <div class="upload-area" id="uploadArea">
-                    <h3>📁 Drop your downloaded MP3 file here</h3>
-                    <p>Or click to browse your files</p>
+                    <h3>📁 Upload Your MP3 File</h3>
+                    <p>Drag & drop or click to select</p>
                     <input type="file" id="fileInput" accept=".mp3" style="display: none;">
                     <button class="btn" onclick="document.getElementById('fileInput').click()">Select MP3 File</button>
                     <div id="fileInfo" style="margin-top: 15px;"></div>
+                    <button class="btn btn-success" onclick="uploadFile()" style="margin-top: 15px;">Upload to My Account</button>
                 </div>
-
-                <button class="btn btn-success" onclick="uploadFile()" style="margin-top: 15px;">Upload to My Account</button>
             </div>
 
             <!-- Downloads Management -->
@@ -410,8 +419,8 @@
     <div class="progress-overlay" id="progressOverlay">
         <div class="progress-content">
             <div class="spinner"></div>
-            <h3 id="progressTitle">Processing...</h3>
-            <p id="progressMessage">Please wait while we process your request</p>
+            <h3 id="progressTitle">Converting Video...</h3>
+            <p id="progressMessage">Please wait while we process your video</p>
         </div>
     </div>
 
@@ -448,11 +457,6 @@
                 return;
             }
 
-            if (!url.includes('youtube.com') && !url.includes('youtu.be')) {
-                showStatus('Please enter a valid YouTube URL', 'error');
-                return;
-            }
-
             currentVideoUrl = url;
             showProgress('Getting Video Info', 'Fetching video information from YouTube...');
 
@@ -479,9 +483,10 @@
                     
                     // Show download section
                     document.getElementById('downloadSection').style.display = 'block';
+                    document.getElementById('uploadArea').style.display = 'block';
                     
                     hideProgress();
-                    showStatus('Video info loaded successfully! Choose a download service below.', 'success');
+                    showStatus('Video info loaded successfully! Choose a conversion service.', 'success');
                 } else {
                     hideProgress();
                     showStatus(data.error, 'error');
@@ -492,47 +497,73 @@
             }
         }
 
-        function openService(serviceType) {
-            if (!currentVideoId) {
+        async function convertVideo(service) {
+            if (!currentVideoUrl) {
                 showStatus('Please get video info first', 'error');
                 return;
             }
 
-            const frameContainer = document.getElementById('serviceFrameContainer');
-            const frame = document.getElementById('serviceFrame');
-            const frameTitle = document.getElementById('frameTitle');
+            showProgress('Converting Video', 'Converting YouTube video to MP3...');
 
-            let serviceUrl = '';
-            let title = '';
+            try {
+                const response = await fetch('/convert', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ 
+                        url: currentVideoUrl,
+                        service: service
+                    })
+                });
 
-            switch(serviceType) {
-                case 'ytmp3':
-                    serviceUrl = `https://ytmp3.cc/?url=https://www.youtube.com/watch?v=${currentVideoId}`;
-                    title = 'YTMP3 Converter';
-                    break;
-                case 'loader':
-                    serviceUrl = `https://loader.to/en87/download-youtube-mp3.html?video=https://www.youtube.com/watch?v=${currentVideoId}`;
-                    title = 'Loader.to';
-                    break;
-                case 'y2mate':
-                    serviceUrl = `https://y2mate.com/youtube/${currentVideoId}`;
-                    title = 'Y2Mate';
-                    break;
+                const data = await response.json();
+                hideProgress();
+
+                if (data.success) {
+                    const downloadLinks = document.getElementById('downloadLinks');
+                    const directLinksList = document.getElementById('directLinksList');
+                    const apiResult = document.getElementById('apiResult');
+
+                    downloadLinks.style.display = 'block';
+
+                    if (data.download_url) {
+                        // Direct download available
+                        apiResult.innerHTML = `
+                            <div class="conversion-result">
+                                <h3>✅ Conversion Successful!</h3>
+                                <p>Your MP3 is ready to download</p>
+                                <a href="${data.download_url}" class="btn btn-success" target="_blank" download>
+                                    📥 Download MP3 Now
+                                </a>
+                                <p style="margin-top: 10px; font-size: 14px; color: #666;">
+                                    After downloading, upload the file to manage it here.
+                                </p>
+                            </div>
+                        `;
+                        showStatus('Conversion successful! Click the download button above.', 'success');
+                    } else if (data.direct_links) {
+                        // Show external links
+                        directLinksList.innerHTML = `
+                            <p>${data.message}</p>
+                            ${data.direct_links.map(link => `
+                                <div class="download-link-item">
+                                    <strong>${link.name}</strong>
+                                    <a href="${link.url}" class="btn btn-external" target="_blank">
+                                        Open & Download
+                                    </a>
+                                </div>
+                            `).join('')}
+                        `;
+                        showStatus('Choose any service above to download your MP3', 'info');
+                    }
+                } else {
+                    showStatus('Conversion failed: ' + data.error, 'error');
+                }
+            } catch (error) {
+                hideProgress();
+                showStatus('Conversion failed: ' + error.message, 'error');
             }
-
-            frameTitle.textContent = title;
-            frame.src = serviceUrl;
-            frameContainer.style.display = 'block';
-
-            // Show upload section when service is opened
-            document.getElementById('uploadSection').style.display = 'block';
-
-            showStatus(`Opened ${title}. Download your MP3 file, then upload it in the next step.`, 'info');
-        }
-
-        function closeServiceFrame() {
-            document.getElementById('serviceFrameContainer').style.display = 'none';
-            document.getElementById('serviceFrame').src = '';
         }
 
         // File upload handling
@@ -588,8 +619,8 @@
 
             const formData = new FormData();
             formData.append('file', file);
-            formData.append('video_id', currentVideoId);
-            formData.append('video_title', currentVideoTitle);
+            formData.append('video_id', currentVideoId || 'user_uploaded');
+            formData.append('video_title', currentVideoTitle || file.name.replace('.mp3', ''));
 
             try {
                 const response = await fetch('/upload-mp3', {
@@ -623,7 +654,7 @@
                 const downloadsList = document.getElementById('downloadsList');
                 
                 if (!data.success || !data.downloads || data.downloads.length === 0) {
-                    downloadsList.innerHTML = '<div class="status info">No files yet. Download and upload some MP3 files!</div>';
+                    downloadsList.innerHTML = '<div class="status info">No files yet. Convert and upload some MP3 files!</div>';
                     return;
                 }
 
@@ -679,7 +710,8 @@
         // Load downloads when page loads
         document.addEventListener('DOMContentLoaded', function() {
             loadDownloads();
-            showStatus('Welcome! Enter a YouTube URL to get started.', 'info');
+            document.getElementById('uploadArea').style.display = 'block';
+            showStatus('Welcome! Enter a YouTube URL to convert videos to MP3.', 'info');
         });
 
         // Allow Enter key in URL input
