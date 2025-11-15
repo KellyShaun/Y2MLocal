@@ -18,21 +18,6 @@ DOWNLOAD_FOLDER = "downloads"
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
 # ----------------------------
-# External download services as fallback
-# ----------------------------
-EXTERNAL_SERVICES = [
-    {
-        'name': 'y2mate',
-        'api_url': 'https://www.y2mate.com/mates/analyzeV2/ajax',
-        'download_url': 'https://www.y2mate.com/mates/convertV2/index'
-    },
-    {
-        'name': 'onlinevideoconverter',
-        'api_url': 'https://onlinevideoconverter.pro/api/convert'
-    }
-]
-
-# ----------------------------
 # In-memory progress tracking
 # ----------------------------
 downloads_progress = {}
@@ -72,6 +57,10 @@ def create_progress_hook(download_id):
 def extract_video_id(url):
     """Extract video ID from various YouTube URL formats"""
     import re
+    
+    # Remove playlist parameters and extract only the video ID
+    url = url.split('&')[0]  # Remove everything after &
+    
     patterns = [
         r'(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/)([^&?/]+)',
         r'youtube\.com/watch\?.*v=([^&]+)',
@@ -82,6 +71,14 @@ def extract_video_id(url):
         if match:
             return match.group(1)
     return None
+
+def clean_youtube_url(url):
+    """Clean YouTube URL to remove playlist parameters and ensure it's a single video"""
+    if 'youtube.com/watch' in url and '&' in url:
+        # Extract only the video part, remove playlist parameters
+        base_url = url.split('&')[0]
+        return base_url
+    return url
 
 def get_basic_video_info(video_id):
     """Get basic video info using public methods"""
@@ -127,189 +124,76 @@ def get_basic_video_info(video_id):
         'source': 'fallback'
     }
 
-def try_external_download_service(video_id, download_id):
-    """Try to download using external services"""
-    try:
-        # Method 1: Try y2mate-like service
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-            'Accept': 'application/json, text/javascript, */*; q=0.01',
-            'X-Requested-With': 'XMLHttpRequest',
-            'Origin': 'https://www.y2mate.com',
-            'Referer': 'https://www.y2mate.com/'
-        }
-        
-        # Analyze the video
-        analyze_data = {
-            'k_query': f'https://www.youtube.com/watch?v={video_id}',
-            'k_page': 'home',
-            'hl': 'en',
-            'q_auto': 0
-        }
-        
-        analyze_response = requests.post(
-            'https://www.y2mate.com/mates/analyzeV2/ajax',
-            data=analyze_data,
-            headers=headers,
-            timeout=30
-        )
-        
-        if analyze_response.status_code == 200:
-            analyze_data = analyze_response.json()
-            if analyze_data.get('status') == 'success':
-                # Get the download link
-                video_title = analyze_data.get('title', f'video_{video_id}')
-                vid = analyze_data.get('vid')
-                
-                convert_data = {
-                    'vid': vid,
-                    'k': f'https://www.youtube.com/watch?v={video_id}'
-                }
-                
-                convert_response = requests.post(
-                    'https://www.y2mate.com/mates/convertV2/index',
-                    data=convert_data,
-                    headers=headers,
-                    timeout=30
-                )
-                
-                if convert_response.status_code == 200:
-                    convert_data = convert_response.json()
-                    if convert_data.get('status') == 'success':
-                        download_url = convert_data.get('dlink')
-                        if download_url:
-                            # Download the file
-                            filename = sanitize_filename(f"{video_title}.mp3")
-                            file_path = os.path.join(DOWNLOAD_FOLDER, filename)
-                            
-                            audio_response = requests.get(download_url, stream=True, timeout=60)
-                            if audio_response.status_code == 200:
-                                with open(file_path, 'wb') as f:
-                                    for chunk in audio_response.iter_content(chunk_size=8192):
-                                        if chunk:
-                                            f.write(chunk)
-                                
-                                downloads_progress[download_id]['file'] = file_path
-                                downloads_progress[download_id]['finished'] = True
-                                downloads_progress[download_id]['progress'] = 100
-                                return True
-    except Exception as e:
-        print(f"External service download failed: {e}")
-    
-    return False
-
-def download_with_cookies(url, download_id, video_id):
-    """Download using yt-dlp with cookies - improved version"""
+def download_with_cookies_simple(url, download_id, video_id):
+    """Simplified download using yt-dlp with cookies - single video only"""
     try:
         cookies_path = 'cookies.txt'
         if not os.path.exists(cookies_path):
             print("❌ Cookies file not found")
             return False
+        
+        # Clean URL to ensure it's a single video, not a playlist
+        clean_url = clean_youtube_url(url)
+        print(f"🔧 Cleaned URL: {clean_url}")
             
-        # Enhanced yt-dlp options
+        # Simple, focused yt-dlp options
         ydl_opts = {
             'format': 'bestaudio/best',
             'outtmpl': os.path.join(DOWNLOAD_FOLDER, '%(title)s.%(ext)s'),
             'cookiefile': cookies_path,
-            'quiet': False,  # Set to False to see more debug info
+            'quiet': False,
             'no_warnings': False,
-            'ignoreerrors': True,
+            'ignoreerrors': False,
             'no_check_certificate': True,
             'progress_hooks': [create_progress_hook(download_id)],
             'extract_flat': False,
-            'socket_timeout': 60,
-            'retries': 15,
-            'fragment_retries': 15,
-            'skip_unavailable_fragments': True,
-            'extractor_retries': 5,
-            # YouTube-specific options
+            'socket_timeout': 30,
+            'retries': 3,
+            'fragment_retries': 3,
+            'skip_unavailable_fragments': False,
+            'noplaylist': True,  # CRITICAL: Don't download playlists
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['android', 'web'], 
-                    'skip': ['dash', 'hls']
+                    'skip': ['dash', 'hls'],
                 }
             },
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '192',
+            }],
             'http_headers': {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
                 'Accept-Language': 'en-US,en;q=0.5',
-                'Accept-Encoding': 'gzip, deflate, br',
-                'DNT': '1',
-                'Connection': 'keep-alive',
-                'Upgrade-Insecure-Requests': '1',
-                'Sec-Fetch-Dest': 'document',
-                'Sec-Fetch-Mode': 'navigate',
-                'Sec-Fetch-Site': 'none',
-                'Cache-Control': 'max-age=0',
             }
         }
         
-        print(f"🔧 Attempting download with cookies for video {video_id}")
+        print(f"🎯 Attempting single video download for: {video_id}")
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            # First try to get info without downloading
             try:
-                info = ydl.extract_info(url, download=False)
-                print(f"✅ Successfully extracted info: {info.get('title', 'Unknown')}")
-            except Exception as e:
-                print(f"❌ Failed to extract info: {e}")
-                return False
-            
-            # Now try to download
-            try:
-                ydl.download([url])
-                print("✅ Download completed successfully")
+                # Extract info first to verify it works
+                info = ydl.extract_info(clean_url, download=False)
+                print(f"✅ Video info extracted: {info.get('title', 'Unknown')}")
+                
+                # Now download
+                ydl.download([clean_url])
+                print("✅ Download completed")
+                
+                # Find the downloaded MP3 file
+                for f in os.listdir(DOWNLOAD_FOLDER):
+                    if f.endswith('.mp3') and (video_id in f or info.get('title', '').replace(' ', '_') in f):
+                        file_path = os.path.join(DOWNLOAD_FOLDER, f)
+                        downloads_progress[download_id]['file'] = file_path
+                        downloads_progress[download_id]['finished'] = True
+                        downloads_progress[download_id]['progress'] = 100
+                        print(f"✅ MP3 file ready: {f}")
+                        return True
+                        
             except Exception as e:
                 print(f"❌ Download failed: {e}")
                 return False
-            
-            # Find and process the downloaded file
-            downloaded_files = []
-            for f in os.listdir(DOWNLOAD_FOLDER):
-                if (video_id in f or any(ext in f for ext in ['.m4a', '.webm', '.opus', '.mp3'])) and not f.endswith('.part'):
-                    downloaded_files.append(f)
-            
-            print(f"📁 Found files: {downloaded_files}")
-            
-            if downloaded_files:
-                # Sort by modification time (newest first)
-                downloaded_files.sort(key=lambda f: os.path.getmtime(os.path.join(DOWNLOAD_FOLDER, f)), reverse=True)
-                original_file = os.path.join(DOWNLOAD_FOLDER, downloaded_files[0])
-                
-                # If it's already MP3, we're done
-                if original_file.endswith('.mp3'):
-                    downloads_progress[download_id]['file'] = original_file
-                    downloads_progress[download_id]['finished'] = True
-                    downloads_progress[download_id]['progress'] = 100
-                    print(f"✅ MP3 file ready: {original_file}")
-                    return True
-                
-                # Convert to MP3
-                mp3_file = original_file.rsplit('.', 1)[0] + '.mp3'
-                ffmpeg_path = detect_ffmpeg_path()
-                
-                print(f"🔄 Converting {original_file} to MP3...")
-                result = subprocess.run([
-                    ffmpeg_path, '-y', '-i', original_file, 
-                    '-vn', '-acodec', 'libmp3lame', 
-                    '-ab', '192k', '-ar', '44100', 
-                    '-ac', '2',  # stereo
-                    mp3_file
-                ], capture_output=True, text=True, timeout=300)  # 5 minute timeout
-                
-                if result.returncode == 0 and os.path.exists(mp3_file):
-                    # Remove original file
-                    if os.path.exists(original_file):
-                        os.remove(original_file)
-                    
-                    downloads_progress[download_id]['file'] = mp3_file
-                    downloads_progress[download_id]['finished'] = True
-                    downloads_progress[download_id]['progress'] = 100
-                    print(f"✅ Conversion successful: {mp3_file}")
-                    return True
-                else:
-                    print(f"❌ FFmpeg conversion failed: {result.stderr}")
         
         return False
         
@@ -319,68 +203,58 @@ def download_with_cookies(url, download_id, video_id):
         traceback.print_exc()
         return False
 
-def download_with_aggressive_settings(url, download_id, video_id):
-    """Download using yt-dlp with aggressive settings (no cookies)"""
+def try_simple_download(url, download_id, video_id):
+    """Try simple download without cookies first"""
     try:
+        clean_url = clean_youtube_url(url)
+        
         ydl_opts = {
             'format': 'bestaudio/best',
             'outtmpl': os.path.join(DOWNLOAD_FOLDER, '%(title)s.%(ext)s'),
-            'quiet': True,
-            'no_warnings': True,
-            'ignoreerrors': True,
-            'no_check_certificate': True,
+            'quiet': False,
+            'no_warnings': False,
+            'ignoreerrors': False,
             'progress_hooks': [create_progress_hook(download_id)],
-            'extract_flat': False,
-            'socket_timeout': 30,
-            'retries': 10,
-            'fragment_retries': 10,
-            'skip_unavailable_fragments': True,
-            'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                'Accept-Language': 'en-us,en;q=0.5',
-                'Accept-Encoding': 'gzip,deflate',
-                'Accept-Charset': 'ISO-8859-1,utf-8;q=0.7,*;q=0.7',
-                'Keep-Alive': '300',
-                'Connection': 'keep-alive',
-                'Referer': 'https://www.youtube.com/',
-            }
+            'noplaylist': True,
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '192',
+            }],
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android'],
+                }
+            },
         }
         
+        print(f"🔧 Trying simple download for: {video_id}")
+        
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            
-            # Find the downloaded file and convert to MP3 if needed
-            downloaded_files = [f for f in os.listdir(DOWNLOAD_FOLDER) 
-                              if video_id in f and f.endswith(('.m4a', '.webm', '.opus'))]
-            
-            if downloaded_files:
-                original_file = os.path.join(DOWNLOAD_FOLDER, downloaded_files[0])
-                mp3_file = original_file.rsplit('.', 1)[0] + '.mp3'
+            try:
+                info = ydl.extract_info(clean_url, download=False)
+                print(f"✅ Simple info extraction worked: {info.get('title', 'Unknown')}")
                 
-                # Convert to MP3
-                ffmpeg_path = detect_ffmpeg_path()
-                result = subprocess.run([
-                    ffmpeg_path, '-y', '-i', original_file, 
-                    '-vn', '-acodec', 'libmp3lame', 
-                    '-ab', '192k', '-ar', '44100', 
-                    mp3_file
-                ], capture_output=True, text=True)
+                ydl.download([clean_url])
+                print("✅ Simple download completed")
                 
-                if result.returncode == 0 and os.path.exists(mp3_file):
-                    # Remove original file
-                    if os.path.exists(original_file):
-                        os.remove(original_file)
-                    
-                    downloads_progress[download_id]['file'] = mp3_file
-                    downloads_progress[download_id]['finished'] = True
-                    downloads_progress[download_id]['progress'] = 100
-                    return True
+                # Find the file
+                for f in os.listdir(DOWNLOAD_FOLDER):
+                    if f.endswith('.mp3') and (video_id in f or info.get('title', '').replace(' ', '_') in f):
+                        file_path = os.path.join(DOWNLOAD_FOLDER, f)
+                        downloads_progress[download_id]['file'] = file_path
+                        downloads_progress[download_id]['finished'] = True
+                        downloads_progress[download_id]['progress'] = 100
+                        return True
+                        
+            except Exception as e:
+                print(f"❌ Simple download failed: {e}")
+                return False
         
         return False
         
     except Exception as e:
-        print(f"Aggressive settings download failed: {e}")
+        print(f"❌ Simple download method failed: {e}")
         return False
 
 def download_with_fallback(url, download_id):
@@ -389,24 +263,38 @@ def download_with_fallback(url, download_id):
     if not video_id:
         raise Exception("Could not extract video ID from URL")
     
-    methods = [
-        ("yt-dlp with cookies", lambda: download_with_cookies(url, download_id, video_id)),
-        ("external services", lambda: try_external_download_service(video_id, download_id)),
-        ("yt-dlp aggressive", lambda: download_with_aggressive_settings(url, download_id, video_id))
-    ]
+    print(f"🎬 Starting download process for video: {video_id}")
     
-    for method_name, method_func in methods:
-        print(f"🔄 Trying {method_name}...")
-        try:
-            if method_func():
-                print(f"✅ {method_name} succeeded!")
-                return
-            else:
-                print(f"❌ {method_name} failed")
-        except Exception as e:
-            print(f"❌ {method_name} error: {e}")
+    # Method 1: Try simple download first (no cookies)
+    print("🔄 Trying simple download (no cookies)...")
+    if try_simple_download(url, download_id, video_id):
+        print("✅ Simple download succeeded!")
+        return
     
-    raise Exception("All download methods failed. YouTube may be blocking requests from this server.")
+    # Method 2: Try with cookies
+    print("🔄 Trying download with cookies...")
+    if download_with_cookies_simple(url, download_id, video_id):
+        print("✅ Cookie download succeeded!")
+        return
+    
+    # Method 3: Last resort - try external service
+    print("🔄 Trying external service...")
+    if try_external_download_service(video_id, download_id):
+        print("✅ External service succeeded!")
+        return
+    
+    raise Exception("All download methods failed. The video might be restricted or unavailable.")
+
+def try_external_download_service(video_id, download_id):
+    """Try external download service as last resort"""
+    try:
+        print(f"🌐 Trying external service for video: {video_id}")
+        # This would be your external service implementation
+        # For now, just return False since we want to focus on yt-dlp fixes
+        return False
+    except Exception as e:
+        print(f"❌ External service failed: {e}")
+        return False
 
 def download_to_mp3(url, download_id):
     """Main download function"""
@@ -421,6 +309,7 @@ def download_to_mp3(url, download_id):
                 downloads_progress[download_id]['file'] = os.path.join(DOWNLOAD_FOLDER, f)
                 downloads_progress[download_id]['finished'] = True
                 downloads_progress[download_id]['progress'] = 100
+                print(f"✅ File already exists: {f}")
                 return
         
         # Try to download
@@ -429,6 +318,7 @@ def download_to_mp3(url, download_id):
     except Exception as e:
         downloads_progress[download_id]['error'] = str(e)
         downloads_progress[download_id]['finished'] = True
+        print(f"💥 Download failed: {e}")
 
 # ----------------------------
 # Flask routes
@@ -492,18 +382,21 @@ def info():
     if not url:
         return jsonify({'success': False, 'error': 'No URL provided'})
     
+    # Clean the URL to remove playlist parameters
+    clean_url = clean_youtube_url(url)
+    
     # Basic YouTube URL validation
-    if not any(domain in url for domain in ['youtube.com', 'youtu.be']):
+    if not any(domain in clean_url for domain in ['youtube.com', 'youtu.be']):
         return jsonify({'success': False, 'error': 'Please provide a valid YouTube URL'})
     
     try:
-        video_id = extract_video_id(url)
+        video_id = extract_video_id(clean_url)
         if not video_id:
             return jsonify({'success': False, 'error': 'Invalid YouTube URL'})
         
         video_info = get_basic_video_info(video_id)
         video_info['limited_info'] = True
-        video_info['warning'] = 'Download may take longer as we use external services'
+        video_info['warning'] = 'Download may take longer due to YouTube restrictions'
         
         return jsonify({'success': True, **video_info})
         
@@ -523,7 +416,10 @@ def download_mp3():
         return jsonify({'success': False, 'error': 'No URL provided'})
 
     try:
-        video_id = extract_video_id(url)
+        # Clean the URL first
+        clean_url = clean_youtube_url(url)
+        video_id = extract_video_id(clean_url)
+        
         if not video_id:
             return jsonify({'success': False, 'error': 'Invalid YouTube URL'})
 
@@ -538,7 +434,7 @@ def download_mp3():
 
         download_id = str(uuid.uuid4())
         downloads_progress[download_id] = {'progress': 0, 'finished': False, 'file': None}
-        threading.Thread(target=download_to_mp3, args=(url, download_id), daemon=True).start()
+        threading.Thread(target=download_to_mp3, args=(clean_url, download_id), daemon=True).start()
         return jsonify({'success': True, 'download_id': download_id})
         
     except Exception as e:
@@ -630,7 +526,8 @@ if __name__ == "__main__":
         print("💡 Visit /cookies-help for setup instructions")
     
     print("🚀 YouTube MP3 Downloader started")
-    print("📡 Using external services for reliable downloads")
+    print("📡 Using optimized download methods")
     print(f"🔊 Download folder: {DOWNLOAD_FOLDER}")
+    print("💡 Tip: Use single video URLs, not playlist URLs")
     
     app.run(debug=False, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
