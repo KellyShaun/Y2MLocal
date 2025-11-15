@@ -154,7 +154,17 @@
             color: #333;
         }
 
-        .download-links {
+        .download-result {
+            display: none;
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+
+        .external-links {
             display: none;
             background: white;
             border-radius: 10px;
@@ -219,7 +229,6 @@
             margin: 20px 0;
             background: #f8f9ff;
             transition: all 0.3s;
-            display: none;
         }
 
         .upload-area.dragover {
@@ -277,54 +286,14 @@
             border: 1px solid #b3d7ff;
         }
 
-        .step-indicator {
-            display: flex;
-            justify-content: space-between;
-            margin: 20px 0;
-            position: relative;
-        }
-
-        .step {
-            flex: 1;
-            text-align: center;
-            padding: 10px;
-            background: #e9ecef;
-            border-radius: 20px;
-            margin: 0 5px;
-            font-weight: bold;
-            position: relative;
-            z-index: 2;
-            font-size: 14px;
-        }
-
-        .step.active {
-            background: #667eea;
-            color: white;
-        }
-
-        .step.completed {
-            background: #28a745;
-            color: white;
-        }
-
-        .step-line {
-            position: absolute;
-            top: 50%;
-            left: 0;
-            right: 0;
-            height: 3px;
-            background: #e9ecef;
-            z-index: 1;
-        }
-
-        .conversion-result {
-            display: none;
+        .auto-download-section {
             background: #e8f5e8;
             border: 2px solid #28a745;
             border-radius: 10px;
             padding: 20px;
             margin: 20px 0;
             text-align: center;
+            display: none;
         }
     </style>
 </head>
@@ -332,7 +301,7 @@
     <div class="container">
         <div class="header">
             <h1>🎵 YouTube MP3 Downloader</h1>
-            <p>Convert YouTube videos to MP3 with one click</p>
+            <p>Convert and download YouTube videos as MP3 automatically</p>
         </div>
 
         <div class="content">
@@ -357,50 +326,32 @@
 
             <!-- Step 2: Download Services -->
             <div class="section" id="downloadSection" style="display: none;">
-                <h2>📥 Step 2: Convert to MP3</h2>
-                <p>Choose a service to convert your video. We'll handle the conversion and provide download links.</p>
-                
-                <div class="step-indicator">
-                    <div class="step-line"></div>
-                    <div class="step completed">1. Enter URL</div>
-                    <div class="step active">2. Convert</div>
-                    <div class="step">3. Download</div>
-                    <div class="step">4. Complete</div>
-                </div>
+                <h2>📥 Step 2: Convert & Download</h2>
+                <p>Click below to automatically convert and download your video as MP3.</p>
 
                 <div class="services-grid">
                     <div class="service-card">
-                        <h3>⚡ Fast Conversion</h3>
-                        <p>Quick MP3 conversion</p>
-                        <button class="btn" onclick="convertVideo('loader')">Convert Now</button>
-                    </div>
-                    <div class="service-card">
-                        <h3>🎵 High Quality</h3>
-                        <p>Best audio quality</p>
-                        <button class="btn" onclick="convertVideo('ytmp3')">Convert Now</button>
+                        <h3>⚡ Auto Download</h3>
+                        <p>Automatic conversion and download</p>
+                        <button class="btn btn-success" onclick="convertAndDownload()">Download MP3 Now</button>
                     </div>
                 </div>
 
-                <!-- Direct Download Links -->
-                <div class="download-links" id="downloadLinks">
-                    <h3>📥 Download Your MP3</h3>
-                    <div id="directLinksList"></div>
-                    <div id="apiResult"></div>
+                <!-- Auto Download Result -->
+                <div class="auto-download-section" id="autoDownloadSection">
+                    <h3>✅ Download Ready!</h3>
+                    <p>Your MP3 file is being downloaded automatically.</p>
+                    <button class="btn" onclick="downloadAgain()" id="downloadAgainBtn">Download Again</button>
+                    <p style="margin-top: 10px; font-size: 14px; color: #666;">
+                        The file has been saved to your downloads folder.
+                    </p>
                 </div>
-            </div>
 
-            <!-- Step 3: File Upload -->
-            <div class="section">
-                <h2>📤 Step 3: Manage Your Files</h2>
-                <p>Upload MP3 files you've downloaded or manage existing files.</p>
-
-                <div class="upload-area" id="uploadArea">
-                    <h3>📁 Upload Your MP3 File</h3>
-                    <p>Drag & drop or click to select</p>
-                    <input type="file" id="fileInput" accept=".mp3" style="display: none;">
-                    <button class="btn" onclick="document.getElementById('fileInput').click()">Select MP3 File</button>
-                    <div id="fileInfo" style="margin-top: 15px;"></div>
-                    <button class="btn btn-success" onclick="uploadFile()" style="margin-top: 15px;">Upload to My Account</button>
+                <!-- External Links Fallback -->
+                <div class="external-links" id="externalLinks">
+                    <h3>🔗 Alternative Download Methods</h3>
+                    <p id="externalMessage">Use these services if auto-download doesn't work:</p>
+                    <div id="externalLinksList"></div>
                 </div>
             </div>
 
@@ -428,6 +379,7 @@
         let currentVideoId = '';
         let currentVideoTitle = '';
         let currentVideoUrl = '';
+        let currentDownloadUrl = '';
 
         function showStatus(message, type = 'info') {
             const statusDiv = document.getElementById('statusMessage');
@@ -483,10 +435,9 @@
                     
                     // Show download section
                     document.getElementById('downloadSection').style.display = 'block';
-                    document.getElementById('uploadArea').style.display = 'block';
                     
                     hideProgress();
-                    showStatus('Video info loaded successfully! Choose a conversion service.', 'success');
+                    showStatus('Video info loaded successfully! Click "Download MP3 Now" to start.', 'success');
                 } else {
                     hideProgress();
                     showStatus(data.error, 'error');
@@ -497,7 +448,7 @@
             }
         }
 
-        async function convertVideo(service) {
+        async function convertAndDownload() {
             if (!currentVideoUrl) {
                 showStatus('Please get video info first', 'error');
                 return;
@@ -512,52 +463,24 @@
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({ 
-                        url: currentVideoUrl,
-                        service: service
+                        url: currentVideoUrl
                     })
                 });
 
                 const data = await response.json();
-                hideProgress();
 
                 if (data.success) {
-                    const downloadLinks = document.getElementById('downloadLinks');
-                    const directLinksList = document.getElementById('directLinksList');
-                    const apiResult = document.getElementById('apiResult');
-
-                    downloadLinks.style.display = 'block';
-
                     if (data.download_url) {
-                        // Direct download available
-                        apiResult.innerHTML = `
-                            <div class="conversion-result">
-                                <h3>✅ Conversion Successful!</h3>
-                                <p>Your MP3 is ready to download</p>
-                                <a href="${data.download_url}" class="btn btn-success" target="_blank" download>
-                                    📥 Download MP3 Now
-                                </a>
-                                <p style="margin-top: 10px; font-size: 14px; color: #666;">
-                                    After downloading, upload the file to manage it here.
-                                </p>
-                            </div>
-                        `;
-                        showStatus('Conversion successful! Click the download button above.', 'success');
-                    } else if (data.direct_links) {
-                        // Show external links
-                        directLinksList.innerHTML = `
-                            <p>${data.message}</p>
-                            ${data.direct_links.map(link => `
-                                <div class="download-link-item">
-                                    <strong>${link.name}</strong>
-                                    <a href="${link.url}" class="btn btn-external" target="_blank">
-                                        Open & Download
-                                    </a>
-                                </div>
-                            `).join('')}
-                        `;
-                        showStatus('Choose any service above to download your MP3', 'info');
+                        // We have a direct download URL - trigger download
+                        currentDownloadUrl = data.download_url;
+                        await triggerDownload(data.download_url);
+                    } else if (data.external_links) {
+                        // Show external links as fallback
+                        showExternalLinks(data.external_links, data.message);
+                        hideProgress();
                     }
                 } else {
+                    hideProgress();
                     showStatus('Conversion failed: ' + data.error, 'error');
                 }
             } catch (error) {
@@ -566,84 +489,87 @@
             }
         }
 
-        // File upload handling
-        document.getElementById('fileInput').addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            if (file) {
-                const fileInfo = document.getElementById('fileInfo');
-                fileInfo.innerHTML = `
-                    <div class="status info">
-                        <strong>Selected File:</strong> ${file.name}<br>
-                        <strong>Size:</strong> ${(file.size / 1024 / 1024).toFixed(2)} MB<br>
-                        <strong>Type:</strong> ${file.type || 'audio/mpeg'}
-                    </div>
-                `;
-            }
-        });
-
-        // Drag and drop for upload area
-        const uploadArea = document.getElementById('uploadArea');
-        uploadArea.addEventListener('dragover', function(e) {
-            e.preventDefault();
-            uploadArea.classList.add('dragover');
-        });
-
-        uploadArea.addEventListener('dragleave', function(e) {
-            e.preventDefault();
-            uploadArea.classList.remove('dragover');
-        });
-
-        uploadArea.addEventListener('drop', function(e) {
-            e.preventDefault();
-            uploadArea.classList.remove('dragover');
-            const file = e.dataTransfer.files[0];
-            if (file && (file.name.endsWith('.mp3') || file.type === 'audio/mpeg')) {
-                document.getElementById('fileInput').files = e.dataTransfer.files;
-                const event = new Event('change');
-                document.getElementById('fileInput').dispatchEvent(event);
-            } else {
-                showStatus('Please drop an MP3 file only', 'error');
-            }
-        });
-
-        async function uploadFile() {
-            const fileInput = document.getElementById('fileInput');
-            const file = fileInput.files[0];
-            
-            if (!file) {
-                showStatus('Please select an MP3 file first', 'error');
-                return;
-            }
-
-            showProgress('Uploading File', 'Saving your MP3 file to your account...');
-
-            const formData = new FormData();
-            formData.append('file', file);
-            formData.append('video_id', currentVideoId || 'user_uploaded');
-            formData.append('video_title', currentVideoTitle || file.name.replace('.mp3', ''));
+        async function triggerDownload(downloadUrl) {
+            showProgress('Starting Download', 'Preparing your MP3 file for download...');
 
             try {
-                const response = await fetch('/upload-mp3', {
+                // Create a safe filename
+                const safeTitle = currentVideoTitle.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+                const filename = `${safeTitle}_${currentVideoId}.mp3`;
+
+                // Method 1: Try to download through our server
+                const downloadResponse = await fetch('/download-file', {
                     method: 'POST',
-                    body: formData
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        download_url: downloadUrl,
+                        filename: filename
+                    })
                 });
 
-                const data = await response.json();
+                if (downloadResponse.ok) {
+                    // Create a blob and trigger download
+                    const blob = await downloadResponse.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.style.display = 'none';
+                    a.href = url;
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
 
-                if (data.success) {
                     hideProgress();
-                    showStatus('🎉 File uploaded successfully! You can now play or download it from your files list.', 'success');
-                    fileInput.value = '';
-                    document.getElementById('fileInfo').innerHTML = '';
-                    loadDownloads();
+                    showAutoDownloadSuccess();
+                    showStatus('🎉 Download started! Check your downloads folder.', 'success');
+                    loadDownloads(); // Refresh the downloads list
                 } else {
+                    // Method 2: Fallback to direct download
                     hideProgress();
-                    showStatus('Upload failed: ' + data.error, 'error');
+                    const directDownload = confirm('Direct download available. Click OK to download now.');
+                    if (directDownload) {
+                        window.open(downloadUrl, '_blank');
+                        showAutoDownloadSuccess();
+                        showStatus('Download opened in new tab. The file will be saved to your downloads.', 'success');
+                    }
                 }
             } catch (error) {
                 hideProgress();
-                showStatus('Upload failed: ' + error.message, 'error');
+                showStatus('Download failed: ' + error.message, 'error');
             }
+        }
+
+        function showAutoDownloadSuccess() {
+            const autoDownloadSection = document.getElementById('autoDownloadSection');
+            autoDownloadSection.style.display = 'block';
+        }
+
+        function downloadAgain() {
+            if (currentDownloadUrl) {
+                triggerDownload(currentDownloadUrl);
+            }
+        }
+
+        function showExternalLinks(links, message) {
+            const externalLinks = document.getElementById('externalLinks');
+            const externalMessage = document.getElementById('externalMessage');
+            const externalLinksList = document.getElementById('externalLinksList');
+
+            externalMessage.textContent = message;
+            externalLinksList.innerHTML = links.map(link => `
+                <div class="download-link-item">
+                    <strong>${link.name}</strong>
+                    <a href="${link.url}" class="btn btn-external" target="_blank">
+                        Open & Download
+                    </a>
+                </div>
+            `).join('');
+
+            externalLinks.style.display = 'block';
+            showStatus('Auto-download not available. Please use the external links above.', 'info');
         }
 
         async function loadDownloads() {
@@ -654,7 +580,7 @@
                 const downloadsList = document.getElementById('downloadsList');
                 
                 if (!data.success || !data.downloads || data.downloads.length === 0) {
-                    downloadsList.innerHTML = '<div class="status info">No files yet. Convert and upload some MP3 files!</div>';
+                    downloadsList.innerHTML = '<div class="status info">No files yet. Convert and download some MP3 files!</div>';
                     return;
                 }
 
@@ -710,8 +636,7 @@
         // Load downloads when page loads
         document.addEventListener('DOMContentLoaded', function() {
             loadDownloads();
-            document.getElementById('uploadArea').style.display = 'block';
-            showStatus('Welcome! Enter a YouTube URL to convert videos to MP3.', 'info');
+            showStatus('Welcome! Enter a YouTube URL to convert and download MP3 files.', 'info');
         });
 
         // Allow Enter key in URL input
