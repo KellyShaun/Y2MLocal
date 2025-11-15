@@ -3,92 +3,473 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>YouTube to MP3 Downloader</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <title>YouTube MP3 Manager</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.2em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+
+        .section h2 {
+            color: #333;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: transform 0.2s;
+            margin: 5px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #dc3545 0%, #fd7e14 100%);
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
+        }
+
+        .service-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .service-item {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            border: 2px solid #e9ecef;
+            transition: border-color 0.3s;
+        }
+
+        .service-item:hover {
+            border-color: #667eea;
+        }
+
+        .upload-area {
+            border: 2px dashed #667eea;
+            border-radius: 10px;
+            padding: 30px;
+            text-align: center;
+            margin: 20px 0;
+            background: #f8f9ff;
+        }
+
+        .upload-area.dragover {
+            background: #e3f2fd;
+            border-color: #2196f3;
+        }
+
+        .download-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            border: 1px solid #e0e0e0;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            background: white;
+        }
+
+        .download-info {
+            flex: 1;
+        }
+
+        .download-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .status {
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            text-align: center;
+        }
+
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .status.info {
+            background: #cce7ff;
+            color: #004085;
+            border: 1px solid #b3d7ff;
+        }
+
+        input[type="file"] {
+            margin: 15px 0;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            width: 100%;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            margin-bottom: 15px;
+        }
+    </style>
 </head>
 <body>
     <div class="container">
-        <header>
-            <h1><i class="fas fa-music"></i> YouTube to MP3 Downloader</h1>
-            <p>Convert YouTube videos to MP3 audio files instantly</p>
-        </header>
+        <div class="header">
+            <h1>🎵 YouTube MP3 Manager</h1>
+            <p>Download from external services and manage your files here</p>
+        </div>
 
-        <main>
-            <div class="input-section">
-                <div class="url-input-container">
-                    <input type="text" id="youtubeUrl" placeholder="Paste YouTube URL here..." autocomplete="off">
-                    <button id="downloadBtn" onclick="startDownload()">
-                        <i class="fas fa-download"></i> Download
-                    </button>
-                </div>
-                <div id="loadingSpinner" class="loading-spinner hidden">
-                    <i class="fas fa-spinner fa-spin"></i> Processing...
-                </div>
-            </div>
+        <div class="content">
+            <!-- Status Messages -->
+            <div id="statusMessage"></div>
 
-            <!-- Video Info Section -->
-            <div id="videoInfo" class="video-info hidden">
-                <div class="video-thumbnail">
-                    <img id="videoThumbnail" src="" alt="Video thumbnail">
-                </div>
-                <div class="video-details">
-                    <h3 id="videoTitle">Video Title</h3>
-                    <div class="video-meta">
-                        <span><i class="fas fa-user"></i> <span id="videoUploader">Uploader</span></span>
-                        <span><i class="fas fa-clock"></i> <span id="videoDuration">00:00</span></span>
-                        <span><i class="fas fa-eye"></i> <span id="videoViews">0</span> views</span>
+            <!-- Download Services Section -->
+            <div class="section">
+                <h2>📥 Download from External Services</h2>
+                <p>Click any service below to download YouTube videos as MP3. These open in new tabs and use your browser.</p>
+                
+                <div class="service-list">
+                    <div class="service-item">
+                        <h3>YTMP3.cc</h3>
+                        <button class="btn" onclick="openService('https://ytmp3.cc')">Open Service</button>
+                    </div>
+                    <div class="service-item">
+                        <h3>Loader.to</h3>
+                        <button class="btn" onclick="openService('https://loader.to')">Open Service</button>
+                    </div>
+                    <div class="service-item">
+                        <h3>Y2Mate</h3>
+                        <button class="btn" onclick="openService('https://y2mate.com')">Open Service</button>
+                    </div>
+                    <div class="service-item">
+                        <h3>OnlineConverter</h3>
+                        <button class="btn" onclick="openService('https://onlinevideoconverter.pro')">Open Service</button>
                     </div>
                 </div>
-            </div>
 
-            <div id="alreadyDownloaded" class="already-downloaded hidden">
-                <i class="fas fa-info-circle"></i>
-                This video has already been downloaded
-            </div>
-
-            <!-- Progress Section -->
-            <div id="progressSection" class="progress-section hidden">
-                <div class="progress-bar">
-                    <div id="progressFill" class="progress-fill"></div>
+                <div style="margin-top: 20px;">
+                    <p><strong>Quick Download:</strong> Enter YouTube URL to open services directly</p>
+                    <input type="text" id="youtubeUrl" placeholder="https://www.youtube.com/watch?v=...">
+                    <button class="btn btn-success" onclick="openAllServices()">Open All Services</button>
                 </div>
-                <div id="progressText" class="progress-text">0%</div>
-                <div id="progressStatus" class="progress-status">Starting...</div>
             </div>
 
-            <!-- Audio Player Section -->
-            <div id="audioPlayerSection" class="audio-player-section hidden">
-                <h3><i class="fas fa-headphones"></i> Now Playing</h3>
-                <div class="now-playing">
-                    <span id="nowPlayingTitle">Track Name</span>
-                    <button onclick="stopAudio()" class="stop-btn">
-                        <i class="fas fa-stop"></i> Stop
-                    </button>
+            <!-- File Upload Section -->
+            <div class="section">
+                <h2>📤 Upload Your MP3 Files</h2>
+                <p>After downloading from external services, upload the MP3 files here to manage them.</p>
+                
+                <div class="upload-area" id="uploadArea">
+                    <h3>Drop MP3 files here or click to browse</h3>
+                    <p>Supported: .mp3 files only</p>
+                    <input type="file" id="fileInput" accept=".mp3" multiple style="display: none;">
+                    <button class="btn" onclick="document.getElementById('fileInput').click()">Select Files</button>
+                    <div id="fileList" style="margin-top: 15px;"></div>
                 </div>
-                <audio id="audioPlayer" controls>
-                    Your browser does not support the audio element.
-                </audio>
+
+                <div style="margin-top: 15px;">
+                    <input type="text" id="videoTitle" placeholder="Video title (optional)">
+                    <button class="btn btn-success" onclick="uploadFiles()">Upload Selected Files</button>
+                </div>
             </div>
 
             <!-- Downloads List -->
-            <div class="downloads-section">
-                <div class="section-header">
-                    <h2><i class="fas fa-download"></i> Your Downloads</h2>
-                    <button onclick="refreshDownloads()" class="refresh-btn">
-                        <i class="fas fa-sync-alt"></i> Refresh
-                    </button>
-                </div>
-                <div id="downloadsList" class="downloads-list">
-                    <!-- Downloads will be populated here -->
+            <div class="section">
+                <h2>📁 Your Downloaded Files</h2>
+                <button class="btn" onclick="loadDownloads()">Refresh List</button>
+                <div id="downloadsList" style="margin-top: 15px;">
+                    <!-- Files will be loaded here -->
                 </div>
             </div>
-        </main>
-
-        <footer>
-            <p>&copy; 2025 YouTube MP3 Downloader. For educational purposes.</p>
-        </footer>
+        </div>
     </div>
 
-    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+    <script>
+        let selectedFiles = [];
+
+        function showStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('statusMessage');
+            statusDiv.innerHTML = `<div class="status ${type}">${message}</div>`;
+            
+            if (type === 'success' || type === 'error') {
+                setTimeout(() => {
+                    statusDiv.innerHTML = '';
+                }, 5000);
+            }
+        }
+
+        function openService(url) {
+            window.open(url, '_blank');
+            showStatus('Opened service in new tab', 'info');
+        }
+
+        function openAllServices() {
+            const urlInput = document.getElementById('youtubeUrl').value.trim();
+            if (!urlInput) {
+                showStatus('Please enter a YouTube URL first', 'error');
+                return;
+            }
+
+            // Extract video ID if full URL is provided
+            let videoId = urlInput;
+            if (urlInput.includes('youtube.com') || urlInput.includes('youtu.be')) {
+                const match = urlInput.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&]+)/);
+                if (match) videoId = match[1];
+            }
+
+            const services = [
+                `https://ytmp3.cc/?url=https://www.youtube.com/watch?v=${videoId}`,
+                `https://loader.to/en87/download-youtube-mp3.html?video=https://www.youtube.com/watch?v=${videoId}`,
+                `https://y2mate.com/youtube/${videoId}`,
+                `https://onlinevideoconverter.pro/convert?url=https://www.youtube.com/watch?v=${videoId}`
+            ];
+
+            services.forEach(service => {
+                window.open(service, '_blank');
+            });
+
+            showStatus('Opened all services in new tabs. Download from any of them.', 'success');
+        }
+
+        // File handling
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            selectedFiles = Array.from(e.target.files);
+            updateFileList();
+        });
+
+        // Drag and drop support
+        const uploadArea = document.getElementById('uploadArea');
+        
+        uploadArea.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', function(e) {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', function(e) {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            selectedFiles = Array.from(e.dataTransfer.files).filter(file => 
+                file.name.endsWith('.mp3') || file.type === 'audio/mpeg'
+            );
+            updateFileList();
+        });
+
+        function updateFileList() {
+            const fileList = document.getElementById('fileList');
+            if (selectedFiles.length === 0) {
+                fileList.innerHTML = '<p>No files selected</p>';
+                return;
+            }
+
+            fileList.innerHTML = selectedFiles.map(file => 
+                `<div style="margin: 5px 0; padding: 5px; background: white; border-radius: 5px;">
+                    📄 ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)
+                </div>`
+            ).join('');
+        }
+
+        async function uploadFiles() {
+            if (selectedFiles.length === 0) {
+                showStatus('Please select files to upload', 'error');
+                return;
+            }
+
+            const videoTitle = document.getElementById('videoTitle').value.trim() || 'video';
+
+            for (const file of selectedFiles) {
+                if (!file.name.endsWith('.mp3') && file.type !== 'audio/mpeg') {
+                    showStatus(`Skipping ${file.name}: Not an MP3 file`, 'error');
+                    continue;
+                }
+
+                const formData = new FormData();
+                formData.append('file', file);
+                formData.append('video_id', 'user_uploaded');
+                formData.append('video_title', videoTitle);
+
+                showStatus(`Uploading ${file.name}...`, 'info');
+
+                try {
+                    const response = await fetch('/upload-mp3', {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    const data = await response.json();
+
+                    if (data.success) {
+                        showStatus(`Uploaded: ${file.name}`, 'success');
+                    } else {
+                        showStatus(`Failed to upload ${file.name}: ${data.error}`, 'error');
+                    }
+                } catch (error) {
+                    showStatus(`Network error uploading ${file.name}: ${error.message}`, 'error');
+                }
+            }
+
+            // Reset after upload
+            selectedFiles = [];
+            document.getElementById('fileInput').value = '';
+            document.getElementById('videoTitle').value = '';
+            updateFileList();
+            loadDownloads(); // Refresh the downloads list
+        }
+
+        async function loadDownloads() {
+            try {
+                const response = await fetch('/downloads-list');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+
+                const downloadsList = document.getElementById('downloadsList');
+                
+                if (!data.success || !data.downloads || data.downloads.length === 0) {
+                    downloadsList.innerHTML = '<div class="status info">No files yet. Upload some MP3 files!</div>';
+                    return;
+                }
+
+                downloadsList.innerHTML = data.downloads.map(download => `
+                    <div class="download-item">
+                        <div class="download-info">
+                            <strong>${download.name}</strong><br>
+                            <small>${download.size_formatted} • ${download.modified_formatted}</small>
+                        </div>
+                        <div class="download-actions">
+                            <button class="btn btn-secondary" onclick="playAudio('${download.filename}')">Play</button>
+                            <button class="btn" onclick="downloadFile('${download.filename}')">Download</button>
+                            <button class="btn btn-danger" onclick="deleteFile('${download.filename}')">Delete</button>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Error loading downloads:', error);
+                showStatus('Failed to load downloads: ' + error.message, 'error');
+            }
+        }
+
+        function playAudio(filename) {
+            window.open(`/play-audio/${filename}`, '_blank');
+        }
+
+        function downloadFile(filename) {
+            window.open(`/get-file/${filename}`, '_blank');
+        }
+
+        async function deleteFile(filename) {
+            if (!confirm('Are you sure you want to delete this file?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/delete/${filename}`, {
+                    method: 'DELETE'
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showStatus('File deleted successfully', 'success');
+                    loadDownloads();
+                } else {
+                    showStatus('Delete failed: ' + data.error, 'error');
+                }
+            } catch (error) {
+                showStatus('Delete failed: ' + error.message, 'error');
+            }
+        }
+
+        // Load downloads when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            loadDownloads();
+            showStatus('Ready to download and manage MP3 files!', 'info');
+        });
+    </script>
 </body>
 </html>
