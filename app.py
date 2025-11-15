@@ -5,6 +5,7 @@ import re
 import json
 from flask import Flask, request, send_file, jsonify, render_template
 from flask_cors import CORS
+from urllib.parse import quote
 
 app = Flask(__name__)
 CORS(app)
@@ -38,7 +39,6 @@ def extract_video_id(url):
 def get_video_info(video_id):
     """Get basic video info from YouTube"""
     try:
-        # Try oEmbed first
         oembed_url = f"https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={video_id}&format=json"
         response = requests.get(oembed_url, timeout=10)
         
@@ -59,6 +59,28 @@ def get_video_info(video_id):
         'thumbnail': f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg",
         'success': True
     }
+
+def download_from_url(download_url, filename):
+    """Download file from URL and save to downloads folder"""
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': '*/*',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Referer': 'https://www.youtube.com/'
+        }
+        
+        response = requests.get(download_url, headers=headers, stream=True, timeout=60)
+        if response.status_code == 200:
+            file_path = os.path.join(DOWNLOAD_FOLDER, filename)
+            with open(file_path, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+            return True
+    except Exception as e:
+        print(f"Download error: {e}")
+    return False
 
 @app.route('/')
 def home():
@@ -84,10 +106,9 @@ def video_info():
 
 @app.route('/convert', methods=['POST'])
 def convert_video():
-    """Convert YouTube video using external APIs"""
+    """Convert YouTube video using external APIs and return download link"""
     data = request.json
     video_url = data.get('url', '')
-    service = data.get('service', '')
     
     if not video_url:
         return jsonify({'success': False, 'error': 'No URL provided'})
@@ -97,71 +118,68 @@ def convert_video():
         return jsonify({'success': False, 'error': 'Invalid YouTube URL'})
     
     try:
-        if service == 'loader':
-            # Try loader.to API
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Content-Type': 'application/x-www-form-urlencoded',
+        # Try multiple conversion services
+        services = [
+            {
+                'name': 'Loader.to API',
+                'url': 'https://loader.to/ajax/download.php',
+                'data': {'url': video_url, 'format': 'mp3'},
+                'extract': lambda r: r.json().get('download_url') if r.json().get('success') else None
+            },
+            {
+                'name': 'OnlineVideoConverter API',
+                'url': 'https://api.onlinevideoconverter.pro/api/convert',
+                'json': {'url': video_url, 'format': 'mp3'},
+                'extract': lambda r: r.json().get('url') if r.json().get('success') else None
+            },
+            {
+                'name': 'Y2Mate API',
+                'url': f'https://y2mate.com/mates/analyzeV2/ajax',
+                'data': {'k_query': video_url, 'k_page': 'home', 'hl': 'en', 'q_auto': 0},
+                'extract': lambda r: extract_y2mate_download(r.json(), video_id) if r.json().get('status') == 'success' else None
             }
-            
-            payload = {
-                'url': video_url,
-                'format': 'mp3'
-            }
-            
-            response = requests.post(
-                'https://loader.to/ajax/download.php',
-                data=payload,
-                headers=headers,
-                timeout=30
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
-                if result.get('success'):
-                    return jsonify({
-                        'success': True,
-                        'download_url': result.get('download_url'),
-                        'title': result.get('title', f'video_{video_id}'),
-                        'service': 'loader.to'
-                    })
+        ]
         
-        elif service == 'ytmp3':
-            # Try ytmp3 API alternative
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            }
-            
-            # Use a different conversion service
-            response = requests.get(
-                f'https://api.vevio.com/convert',
-                params={'url': video_url, 'format': 'mp3'},
-                headers=headers,
-                timeout=30
-            )
-            
-            if response.status_code == 200:
-                data = response.json()
-                if data.get('url'):
-                    return jsonify({
-                        'success': True,
-                        'download_url': data.get('url'),
-                        'title': data.get('title', f'video_{video_id}'),
-                        'service': 'ytmp3'
-                    })
+        for service in services:
+            try:
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                    'Content-Type': 'application/x-www-form-urlencoded' if 'data' in service else 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Origin': 'https://loader.to' if 'loader.to' in service['url'] else 'https://y2mate.com'
+                }
+                
+                if 'data' in service:
+                    response = requests.post(service['url'], data=service['data'], headers=headers, timeout=30)
+                else:
+                    response = requests.post(service['url'], json=service['json'], headers=headers, timeout=30)
+                
+                if response.status_code == 200:
+                    download_url = service['extract'](response)
+                    if download_url:
+                        return jsonify({
+                            'success': True,
+                            'download_url': download_url,
+                            'service': service['name'],
+                            'message': 'Download link ready!'
+                        })
+                        
+            except Exception as e:
+                print(f"Service {service['name']} failed: {e}")
+                continue
         
-        # Fallback: Return direct download links for user to click
+        # If no API works, return external links
         return jsonify({
             'success': True,
-            'direct_links': [
+            'external_links': [
                 {
                     'name': 'YTMP3.cc',
-                    'url': f'https://ytmp3.cc/?url={video_url}',
+                    'url': f'https://ytmp3.cc/?url={quote(video_url)}',
                     'type': 'external'
                 },
                 {
                     'name': 'Loader.to',
-                    'url': f'https://loader.to/en87/download-youtube-mp3.html?video={video_url}',
+                    'url': f'https://loader.to/en87/download-youtube-mp3.html?video={quote(video_url)}',
                     'type': 'external'
                 },
                 {
@@ -170,7 +188,7 @@ def convert_video():
                     'type': 'external'
                 }
             ],
-            'message': 'Click any link below to download directly'
+            'message': 'Direct conversion not available. Please use external services.'
         })
         
     except Exception as e:
@@ -178,6 +196,84 @@ def convert_video():
             'success': False, 
             'error': f'Conversion failed: {str(e)}'
         })
+
+def extract_y2mate_download(data, video_id):
+    """Extract download URL from Y2Mate response"""
+    try:
+        if data.get('status') == 'success':
+            vid = data.get('vid')
+            if vid:
+                # Get download link from convert API
+                convert_data = {
+                    'vid': vid,
+                    'k': 'mp3'
+                }
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Origin': 'https://y2mate.com'
+                }
+                convert_response = requests.post(
+                    'https://y2mate.com/mates/convertV2/index',
+                    data=convert_data,
+                    headers=headers,
+                    timeout=30
+                )
+                if convert_response.status_code == 200:
+                    convert_data = convert_response.json()
+                    if convert_data.get('status') == 'success':
+                        return convert_data.get('dlink')
+    except Exception as e:
+        print(f"Y2Mate extraction error: {e}")
+    return None
+
+@app.route('/download-file', methods=['POST'])
+def download_file():
+    """Download file from URL and return it directly"""
+    data = request.json
+    download_url = data.get('download_url', '')
+    filename = data.get('filename', 'download.mp3')
+    
+    if not download_url:
+        return jsonify({'success': False, 'error': 'No download URL provided'})
+    
+    try:
+        # Stream the file from the external service and serve it directly
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept': '*/*',
+            'Referer': 'https://www.youtube.com/'
+        }
+        
+        response = requests.get(download_url, headers=headers, stream=True, timeout=60)
+        if response.status_code == 200:
+            # Return the file directly to the client
+            from io import BytesIO
+            file_data = BytesIO()
+            for chunk in response.iter_content(chunk_size=8192):
+                if chunk:
+                    file_data.write(chunk)
+            file_data.seek(0)
+            
+            # Save a copy to downloads folder
+            safe_filename = sanitize_filename(filename)
+            file_path = os.path.join(DOWNLOAD_FOLDER, safe_filename)
+            with open(file_path, 'wb') as f:
+                f.write(file_data.getvalue())
+            file_data.seek(0)
+            
+            return send_file(
+                file_data,
+                as_attachment=True,
+                download_name=safe_filename,
+                mimetype='audio/mpeg'
+            )
+        else:
+            return jsonify({'success': False, 'error': f'Download failed with status {response.status_code}'})
+            
+    except Exception as e:
+        return jsonify({'success': False, 'error': f'Download failed: {str(e)}'})
 
 @app.route('/upload-mp3', methods=['POST'])
 def upload_mp3():
@@ -256,6 +352,6 @@ def health():
     return jsonify({'status': 'healthy', 'timestamp': time.time()})
 
 if __name__ == "__main__":
-    print("🚀 YouTube MP3 Downloader with Direct Conversion")
+    print("🚀 YouTube MP3 Downloader with Auto-Download")
     print(f"📁 Download folder: {DOWNLOAD_FOLDER}")
     app.run(debug=False, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
