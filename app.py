@@ -173,18 +173,8 @@ def convert_video():
             'success': True,
             'external_links': [
                 {
-                    'name': 'YTMP3.cc',
-                    'url': f'https://ytmp3.cc/?url={quote(video_url)}',
-                    'type': 'external'
-                },
-                {
-                    'name': 'Loader.to',
-                    'url': f'https://loader.to/en87/download-youtube-mp3.html?video={quote(video_url)}',
-                    'type': 'external'
-                },
-                {
-                    'name': 'Y2Mate',
-                    'url': f'https://y2mate.com/youtube/{video_id}',
+                    'name': 'Y2mate',
+                    'url': f'https://v6.www-y2mate.com/?url={quote(video_url)}',
                     'type': 'external'
                 }
             ],
@@ -355,3 +345,4 @@ if __name__ == "__main__":
     print("🚀 YouTube MP3 Downloader with Auto-Download")
     print(f"📁 Download folder: {DOWNLOAD_FOLDER}")
     app.run(debug=False, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+
